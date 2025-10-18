@@ -7,6 +7,53 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model otp_verifications {
+  s_no        Int       @id @default(autoincrement())
+  user_id     Int?
+  phone       String    @db.VarChar(15)
+  otp         String    @db.VarChar(6)
+  is_verified Boolean?  @default(false)
+  attempts    Int?      @default(0)
+  expires_at  DateTime  @db.DateTime(0)
+  created_at  DateTime  @default(now()) @db.Timestamp(0)
+  updated_at  DateTime  @default(now()) @db.Timestamp(0)
+  verified_at DateTime? @db.DateTime(0)
+  ip_address  String?   @db.VarChar(45)
+  user_agent  String?   @db.VarChar(255)
+  user        User?     @relation(fields: [user_id], references: [s_no], onDelete: Cascade, onUpdate: Restrict, map: "fk_otp_user")
+
+  @@index([phone], map: "idx_phone")
+  @@index([phone, otp], map: "idx_phone_otp")
+  @@index([expires_at], map: "idx_expires_at")
+  @@index([is_verified], map: "idx_is_verified")
+  @@index([user_id], map: "idx_user_id")
+}
+
+model tokens {
+  s_no               Int       @id @default(autoincrement())
+  user_id            Int
+  access_token       String    @db.Text
+  refresh_token      String?   @db.Text
+  token_type         String?   @default("Bearer") @db.VarChar(20)
+  expires_at         DateTime  @db.DateTime(0)
+  refresh_expires_at DateTime? @db.DateTime(0)
+  is_revoked         Boolean?  @default(false)
+  revoked_at         DateTime? @db.DateTime(0)
+  ip_address         String?   @db.VarChar(45)
+  user_agent         String?   @db.VarChar(255)
+  device_info        Json?
+  created_at         DateTime  @default(now()) @db.Timestamp(0)
+  updated_at         DateTime  @default(now()) @db.Timestamp(0)
+  last_used_at       DateTime? @db.DateTime(0)
+  user               User      @relation(fields: [user_id], references: [s_no], onDelete: Cascade, onUpdate: Restrict, map: "fk_token_user")
+
+  @@index([user_id], map: "idx_user_id")
+  @@index([access_token(length: 255)], map: "idx_access_token")
+  @@index([refresh_token(length: 255)], map: "idx_refresh_token")
+  @@index([is_revoked], map: "idx_is_revoked")
+  @@index([expires_at], map: "idx_expires_at")
+}
+
 model User {
   s_no                 Int                 @id @default(autoincrement())
   name                 String              @db.VarChar(100)
@@ -32,6 +79,8 @@ model User {
   resetTokenExpiry     DateTime?           @db.DateTime(0)
   access_permission_id Int?
   employee_salary      employee_salary[]
+  otp_verifications    otp_verifications[]
+  tokens               tokens[]
   access_permissions   access_permissions? @relation(fields: [access_permission_id], references: [s_no], onUpdate: Restrict, map: "fk_user_access_permission")
   city                 city?               @relation(fields: [city_id], references: [s_no], onDelete: Restrict, onUpdate: Restrict, map: "fk_users_city")
   organization         organization        @relation(fields: [organization_id], references: [s_no], onDelete: Cascade, map: "fk_users_organization")

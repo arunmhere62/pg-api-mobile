@@ -7,9 +7,9 @@ export class VerifyOtpDto {
     description: 'Phone number with country code (without + sign)',
   })
   @IsString()
-  @Matches(/^91[6-9]\d{9}$/, {
-    message: 'Phone number must be a valid Indian mobile number starting with 91',
-  })
+  // @Matches(/^91[6-9]\d{9}$/, {
+  //   message: 'Phone number must be a valid Indian mobile number starting with 91',
+  // })
   phone: string;
 
   @ApiProperty({
