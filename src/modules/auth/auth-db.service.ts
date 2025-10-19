@@ -10,6 +10,7 @@ import { SmsService } from './sms.service';
 import { JwtTokenService } from './jwt.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { SignupDto } from './dto/signup.dto';
 
 @Injectable()
 export class AuthDbService {
@@ -205,17 +206,43 @@ export class AuthDbService {
             role_name: true,
           },
         },
-        organization: {
-          select: {
-            s_no: true,
-            name: true,
-          },
-        },
       },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+
+    // Check if user is superadmin
+    const isSuperAdmin = user.roles.role_name === 'SUPER_ADMIN' || 
+                         user.roles.role_name.toLowerCase() === 'super_admin' ||
+                         user.roles.role_name.toLowerCase() === 'superadmin';
+
+    // Build user response object
+    const userResponse: any = {
+      s_no: user.s_no,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role_id: user.role_id,
+      role_name: user.roles.role_name,
+      status: user.status,
+      address: user.address,
+      city_id: user.city_id,
+      state_id: user.state_id,
+      gender: user.gender,
+    };
+
+    // Add organization details only if not superadmin
+    if (!isSuperAdmin && user.organization_id) {
+      // Fetch organization details
+      const organization = await this.prisma.organization.findUnique({
+        where: { s_no: user.organization_id },
+        select: { s_no: true, name: true },
+      });
+
+      userResponse.organization_id = user.organization_id;
+      userResponse.organization_name = organization?.name;
     }
 
     // Generate JWT tokens
@@ -224,21 +251,7 @@ export class AuthDbService {
     return {
       success: true,
       message: 'Login successful',
-      user: {
-        s_no: user.s_no,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role_id: user.role_id,
-        role_name: user.roles.role_name,
-        organization_id: user.organization_id,
-        organization_name: user.organization.name,
-        status: user.status,
-        address: user.address,
-        city_id: user.city_id,
-        state_id: user.state_id,
-        gender: user.gender,
-      },
+      user: userResponse,
       ...tokens, // Spread tokens (access_token, refresh_token, token_type, expires_in)
     };
   }
@@ -249,6 +262,140 @@ export class AuthDbService {
   async resendOtp(sendOtpDto: SendOtpDto, ipAddress?: string, userAgent?: string) {
     // Just call sendOtp - it will update the existing record
     return this.sendOtp(sendOtpDto, ipAddress, userAgent);
+  }
+
+  /**
+   * User Signup - Create organization, user, role, and PG location
+   */
+  async signup(signupDto: SignupDto) {
+    const {
+      organizationName,
+      name,
+      email,
+      password,
+      phone,
+      pgName,
+      pgAddress,
+      stateId,
+      cityId,
+      pgPincode,
+    } = signupDto;
+
+    // Check if email already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      throw new BadRequestException('Email already registered');
+    }
+
+    // Check if phone already exists (if provided)
+    if (phone) {
+      const existingPhone = await this.prisma.user.findFirst({
+        where: { phone },
+      });
+
+      if (existingPhone) {
+        throw new BadRequestException('Phone number already registered');
+      }
+    }
+
+    try {
+      // Use transaction to ensure all operations succeed or fail together
+      const result = await this.prisma.$transaction(async (prisma) => {
+        // 1. Create organization first
+        const organization = await prisma.organization.create({
+          data: {
+            name: organizationName,
+            description: `Organization for ${organizationName}`,
+            is_deleted: false,
+          },
+        });
+
+        // 2. Find or create ADMIN role for this organization
+        let role = await prisma.roles.findFirst({
+          where: {
+            role_name: 'ADMIN',
+            organization_id: organization.s_no,
+            is_deleted: false,
+          },
+        });
+
+        // If ADMIN role doesn't exist for this organization, create it
+        if (!role) {
+          role = await prisma.roles.create({
+            data: {
+              role_name: 'ADMIN',
+              status: 'ACTIVE',
+              organization_id: organization.s_no,
+              is_deleted: false,
+            },
+          });
+        }
+
+        // 3. Create user (status INACTIVE until admin approval)
+        const user = await prisma.user.create({
+          data: {
+            name,
+            email,
+            password, // Note: In production, hash the password using bcrypt
+            phone,
+            status: 'INACTIVE', // User needs admin approval
+            role_id: role.s_no,
+            organization_id: organization.s_no,
+            is_deleted: false,
+          },
+        });
+
+        // 4. Update organization with created user
+        await prisma.organization.update({
+          where: { s_no: organization.s_no },
+          data: {
+            created_by: user.s_no,
+            updated_by: user.s_no,
+          },
+        });
+
+        // 5. Create PG Location
+        const pgLocation = await prisma.pg_locations.create({
+          data: {
+            user_id: user.s_no,
+            location_name: pgName,
+            address: pgAddress,
+            pincode: pgPincode,
+            status: 'ACTIVE',
+            organization_id: organization.s_no,
+            city_id: cityId,
+            state_id: stateId,
+            is_deleted: false,
+          },
+        });
+
+        // 6. Update user with pgId
+        await prisma.user.update({
+          where: { s_no: user.s_no },
+          data: { pg_id: pgLocation.s_no },
+        });
+
+        return {
+          userId: user.s_no,
+          pgId: pgLocation.s_no,
+          organizationId: organization.s_no,
+          email: user.email,
+          name: user.name,
+        };
+      });
+
+      return {
+        success: true,
+        message: 'Account created successfully. Please wait for admin approval.',
+        data: result,
+      };
+    } catch (error) {
+      console.error('Signup error:', error);
+      throw new BadRequestException('Failed to create account. Please try again.');
+    }
   }
 
   /**

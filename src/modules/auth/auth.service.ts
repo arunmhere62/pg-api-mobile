@@ -153,12 +153,6 @@ export class AuthService {
             role_name: true,
           },
         },
-        organization: {
-          select: {
-            s_no: true,
-            name: true,
-          },
-        },
       },
     });
 
@@ -166,26 +160,44 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
+    // Check if user is superadmin
+    const isSuperAdmin = user.roles.role_name === 'SUPER_ADMIN' || 
+                         user.roles.role_name.toLowerCase() === 'super_admin' ||
+                         user.roles.role_name.toLowerCase() === 'superadmin';
+
+    // Build user response object
+    const userResponse: any = {
+      s_no: user.s_no,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role_id: user.role_id,
+      role_name: user.roles.role_name,
+      status: user.status,
+      address: user.address,
+      city_id: user.city_id,
+      state_id: user.state_id,
+      gender: user.gender,
+    };
+
+    // Add organization details only if not superadmin
+    if (!isSuperAdmin && user.organization_id) {
+      // Fetch organization details
+      const organization = await this.prisma.organization.findUnique({
+        where: { s_no: user.organization_id },
+        select: { s_no: true, name: true },
+      });
+
+      userResponse.organization_id = user.organization_id;
+      userResponse.organization_name = organization?.name;
+    }
+
     // In production, generate JWT token here
     // For now, returning user data
     return {
       success: true,
       message: 'Login successful',
-      user: {
-        s_no: user.s_no,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role_id: user.role_id,
-        role_name: user.roles.role_name,
-        organization_id: user.organization_id,
-        organization_name: user.organization.name,
-        status: user.status,
-        address: user.address,
-        city_id: user.city_id,
-        state_id: user.state_id,
-        gender: user.gender,
-      },
+      user: userResponse,
       // TODO: Add JWT token generation
       // token: 'jwt_token_here'
     };

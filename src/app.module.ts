@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { LocationModule } from './modules/location/location.module';
+import { PgLocationModule } from './modules/pg-location/pg-location.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import configuration from './config';
@@ -14,6 +16,8 @@ import configuration from './config';
     }),
     PrismaModule,
     AuthModule,
+    LocationModule,
+    PgLocationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
