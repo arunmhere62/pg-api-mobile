@@ -4,6 +4,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { LocationModule } from './modules/location/location.module';
 import { PgLocationModule } from './modules/pg-location/pg-location.module';
+import { OrganizationModule } from './modules/organization/organization.module';
+import { TenantModule } from './modules/tenant/tenant.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import configuration from './config';
@@ -18,6 +20,8 @@ import configuration from './config';
     AuthModule,
     LocationModule,
     PgLocationModule,
+    OrganizationModule,
+    TenantModule,
   ],
   controllers: [AppController],
   providers: [AppService],

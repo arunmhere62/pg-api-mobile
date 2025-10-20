@@ -1,7 +1,7 @@
 import { Controller, Get, UseGuards, Query } from '@nestjs/common';
 import { OrganizationService } from './organization.service';
 
-@Controller('api/v1/organizations')
+@Controller('organizations')
 export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
 
@@ -14,8 +14,6 @@ export class OrganizationController {
   async getAllOrganizations(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
-    @Query('search') search?: string,
-    @Query('status') status?: string,
   ) {
     const pageNumber = page ? parseInt(page, 10) : 1;
     const limitNumber = limit ? parseInt(limit, 10) : 10;
@@ -23,8 +21,6 @@ export class OrganizationController {
     return this.organizationService.getAllOrganizations({
       page: pageNumber,
       limit: limitNumber,
-      search,
-      status,
     });
   }
 
