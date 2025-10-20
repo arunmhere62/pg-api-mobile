@@ -29,6 +29,10 @@ export class PendingPaymentService {
 
   /**
    * Calculate pending payments for a specific tenant
+   * Logic:
+   * 1. If tenant is ACTIVE and has NO payments → Pending (full monthly rent)
+   * 2. If last payment end_date has passed → Pending for new period
+   * 3. If paid partial amount → Show balance
    */
   async calculateTenantPendingPayment(
     tenantId: number,
@@ -48,7 +52,7 @@ export class PendingPaymentService {
             is_deleted: false,
           },
           orderBy: {
-            payment_date: 'desc',
+            end_date: 'desc',
           },
           select: {
             payment_date: true,
@@ -65,68 +69,146 @@ export class PendingPaymentService {
       throw new Error('Tenant not found');
     }
 
+    // If tenant is not ACTIVE, no pending payment
+    if (tenant.status !== 'ACTIVE') {
+      return {
+        tenant_id: tenant.s_no,
+        tenant_name: tenant.name,
+        room_no: tenant.rooms?.room_no,
+        total_pending: 0,
+        current_month_pending: 0,
+        overdue_months: 0,
+        payment_status: 'PAID',
+        monthly_rent: tenant.rooms?.rent_price ? parseFloat(tenant.rooms.rent_price.toString()) : 0,
+        pending_months: [],
+      };
+    }
+
     const monthlyRent = tenant.rooms?.rent_price
       ? parseFloat(tenant.rooms.rent_price.toString())
       : 0;
-    const checkInDate = new Date(tenant.check_in_date);
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Calculate all months from check-in to today
-    const pendingMonths = this.calculateMonthlyPending(
-      checkInDate,
-      today,
-      monthlyRent,
-      tenant.tenant_payments,
-    );
+    const lastPayment = tenant.tenant_payments.length > 0 ? tenant.tenant_payments[0] : null;
 
-    // Calculate totals
-    const totalPending = pendingMonths.reduce(
-      (sum, month) => sum + month.balance,
-      0,
-    );
-    const currentMonthPending =
-      pendingMonths.length > 0
-        ? pendingMonths[pendingMonths.length - 1].balance
-        : 0;
-    const overdueMonths = pendingMonths.filter((m) => m.is_overdue).length;
-
-    // Determine payment status
+    let totalPending = 0;
     let paymentStatus: 'PAID' | 'PARTIAL' | 'PENDING' | 'OVERDUE' = 'PAID';
-    if (totalPending > 0) {
-      if (overdueMonths > 0) {
-        paymentStatus = 'OVERDUE';
-      } else if (currentMonthPending > 0 && currentMonthPending < monthlyRent) {
-        paymentStatus = 'PARTIAL';
-      } else {
-        paymentStatus = 'PENDING';
-      }
-    }
-
-    // Get last payment date
-    const lastPayment =
-      tenant.tenant_payments.length > 0 ? tenant.tenant_payments[0] : null;
-    const lastPaymentDate = lastPayment
-      ? new Date(lastPayment.payment_date).toISOString()
-      : undefined;
-
-    // Calculate next due date (end date of last payment or current month end)
     let nextDueDate: string | undefined;
-    if (lastPayment?.end_date) {
-      const endDate = new Date(lastPayment.end_date);
-      // Check if end date is today or in the past
-      if (endDate <= today) {
-        // Next payment is due tomorrow
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        nextDueDate = tomorrow.toISOString();
-      } else {
-        nextDueDate = endDate.toISOString();
-      }
-    } else {
-      // No payments yet, due date is end of current month
+    const pendingMonths: Array<{
+      month: string;
+      year: number;
+      expected_amount: number;
+      paid_amount: number;
+      balance: number;
+      due_date: string;
+      is_overdue: boolean;
+    }> = [];
+
+    // Case 1: No payments at all
+    if (!lastPayment) {
+      totalPending = monthlyRent;
+      paymentStatus = 'PENDING';
+      
+      // Due date is end of current month
       const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      endOfMonth.setHours(23, 59, 59, 999);
       nextDueDate = endOfMonth.toISOString();
+
+      pendingMonths.push({
+        month: today.toLocaleString('default', { month: 'long' }),
+        year: today.getFullYear(),
+        expected_amount: monthlyRent,
+        paid_amount: 0,
+        balance: monthlyRent,
+        due_date: endOfMonth.toISOString(),
+        is_overdue: false,
+      });
+    } 
+    // Case 2: Has payments - check if coverage has ended
+    else {
+      const lastPaymentEndDate = lastPayment.end_date ? new Date(lastPayment.end_date) : null;
+      
+      if (lastPaymentEndDate) {
+        lastPaymentEndDate.setHours(23, 59, 59, 999);
+        
+        // Case 2a: Last payment end date has passed
+        if (lastPaymentEndDate < today) {
+          // Payment period has ended - show as PENDING (not OVERDUE)
+          totalPending = monthlyRent;
+          paymentStatus = 'PENDING';
+          
+          // Show next due date as one day after end date
+          const nextDay = new Date(lastPaymentEndDate);
+          nextDay.setDate(nextDay.getDate() + 1);
+          nextDueDate = nextDay.toISOString();
+
+          const endedMonth = lastPaymentEndDate.toLocaleString('default', { month: 'long' });
+          const endedYear = lastPaymentEndDate.getFullYear();
+
+          pendingMonths.push({
+            month: endedMonth,
+            year: endedYear,
+            expected_amount: monthlyRent,
+            paid_amount: 0,
+            balance: monthlyRent,
+            due_date: nextDay.toISOString(),
+            is_overdue: false,
+          });
+        }
+        // Case 2b: Last payment is still valid (end date is today or future)
+        else {
+          // Check if partial payment
+          const actualRentAmount = lastPayment.actual_rent_amount 
+            ? parseFloat(lastPayment.actual_rent_amount.toString())
+            : monthlyRent;
+          const amountPaid = parseFloat(lastPayment.amount_paid.toString());
+          
+          if (amountPaid < actualRentAmount) {
+            // Partial payment
+            totalPending = actualRentAmount - amountPaid;
+            paymentStatus = 'PARTIAL';
+            nextDueDate = lastPaymentEndDate.toISOString();
+
+            const paymentMonth = lastPaymentEndDate.toLocaleString('default', { month: 'long' });
+            const paymentYear = lastPaymentEndDate.getFullYear();
+
+            pendingMonths.push({
+              month: paymentMonth,
+              year: paymentYear,
+              expected_amount: actualRentAmount,
+              paid_amount: amountPaid,
+              balance: actualRentAmount - amountPaid,
+              due_date: lastPaymentEndDate.toISOString(),
+              is_overdue: false,
+            });
+          } else {
+            // Fully paid and still valid
+            totalPending = 0;
+            paymentStatus = 'PAID';
+            nextDueDate = lastPaymentEndDate.toISOString();
+          }
+        }
+      } else {
+        // No end date on last payment - treat as pending
+        totalPending = monthlyRent;
+        paymentStatus = 'PENDING';
+        
+        const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        endOfMonth.setHours(23, 59, 59, 999);
+        nextDueDate = endOfMonth.toISOString();
+
+        pendingMonths.push({
+          month: today.toLocaleString('default', { month: 'long' }),
+          year: today.getFullYear(),
+          expected_amount: monthlyRent,
+          paid_amount: 0,
+          balance: monthlyRent,
+          due_date: endOfMonth.toISOString(),
+          is_overdue: false,
+        });
+      }
     }
 
     return {
@@ -134,10 +216,10 @@ export class PendingPaymentService {
       tenant_name: tenant.name,
       room_no: tenant.rooms?.room_no,
       total_pending: Math.round(totalPending * 100) / 100,
-      current_month_pending: Math.round(currentMonthPending * 100) / 100,
-      overdue_months: overdueMonths,
+      current_month_pending: Math.round(totalPending * 100) / 100,
+      overdue_months: 0, // No overdue tracking based on dates
       payment_status: paymentStatus,
-      last_payment_date: lastPaymentDate,
+      last_payment_date: lastPayment ? new Date(lastPayment.payment_date).toISOString() : undefined,
       next_due_date: nextDueDate,
       monthly_rent: monthlyRent,
       pending_months: pendingMonths.map((m) => ({
@@ -151,6 +233,7 @@ export class PendingPaymentService {
 
   /**
    * Get all tenants with pending payments
+   * Uses the same simplified logic as calculateTenantPendingPayment
    */
   async getAllPendingPayments(pgId?: number): Promise<PendingPaymentDetails[]> {
     const where: any = {
@@ -177,114 +260,6 @@ export class PendingPaymentService {
 
     // Filter only tenants with pending payments
     return pendingPayments.filter((p) => p.total_pending > 0);
-  }
-
-  /**
-   * Calculate monthly pending amounts
-   */
-  private calculateMonthlyPending(
-    checkInDate: Date,
-    currentDate: Date,
-    monthlyRent: number,
-    payments: Array<{
-      payment_date: Date;
-      amount_paid: any;
-      actual_rent_amount: any;
-      start_date: Date;
-      end_date: Date;
-    }>,
-  ) {
-    const months: Array<{
-      month: string;
-      year: number;
-      expected_amount: number;
-      paid_amount: number;
-      balance: number;
-      due_date: string;
-      is_overdue: boolean;
-    }> = [];
-
-    const startDate = new Date(checkInDate);
-    startDate.setHours(0, 0, 0, 0);
-
-    const endDate = new Date(currentDate);
-    endDate.setHours(0, 0, 0, 0);
-
-    // Iterate through each month from check-in to current date
-    let currentMonth = new Date(startDate);
-
-    while (currentMonth <= endDate) {
-      const monthStart = new Date(currentMonth);
-      const monthEnd = new Date(
-        currentMonth.getFullYear(),
-        currentMonth.getMonth() + 1,
-        0,
-      );
-      monthEnd.setHours(23, 59, 59, 999);
-
-      // Calculate expected amount for this month
-      const daysInMonth = monthEnd.getDate();
-      let daysToCharge = daysInMonth;
-
-      // If it's the first month, calculate from check-in date
-      if (
-        monthStart.getMonth() === startDate.getMonth() &&
-        monthStart.getFullYear() === startDate.getFullYear()
-      ) {
-        daysToCharge = daysInMonth - startDate.getDate() + 1;
-      }
-
-      // If it's the current month, calculate up to today
-      if (
-        monthStart.getMonth() === endDate.getMonth() &&
-        monthStart.getFullYear() === endDate.getFullYear()
-      ) {
-        daysToCharge = endDate.getDate() - monthStart.getDate() + 1;
-      }
-
-      const expectedAmount = (monthlyRent / daysInMonth) * daysToCharge;
-
-      // Calculate paid amount for this month
-      const paidAmount = payments
-        .filter((payment) => {
-          const paymentDate = new Date(payment.payment_date);
-          const paymentStart = payment.start_date
-            ? new Date(payment.start_date)
-            : paymentDate;
-          const paymentEnd = payment.end_date
-            ? new Date(payment.end_date)
-            : paymentDate;
-
-          // Check if payment covers this month
-          return paymentStart <= monthEnd && paymentEnd >= monthStart;
-        })
-        .reduce((sum, payment) => {
-          const amount = parseFloat(payment.amount_paid.toString());
-          return sum + amount;
-        }, 0);
-
-      const balance = expectedAmount - paidAmount;
-      const isOverdue = monthEnd < endDate && balance > 0;
-
-      months.push({
-        month: monthStart.toLocaleString('default', { month: 'long' }),
-        year: monthStart.getFullYear(),
-        expected_amount: expectedAmount,
-        paid_amount: paidAmount,
-        balance: balance > 0 ? balance : 0,
-        due_date: monthEnd.toISOString(),
-        is_overdue: isOverdue,
-      });
-
-      // Move to next month
-      currentMonth = new Date(
-        currentMonth.getFullYear(),
-        currentMonth.getMonth() + 1,
-        1,
-      );
-    }
-
-    return months.filter((m) => m.balance > 0); // Return only months with pending balance
   }
 
   /**

@@ -61,22 +61,28 @@ export class BedService {
    * Get all beds with filters
    */
   async findAll(params: {
+    pg_id?: number;
     page?: number;
     limit?: number;
     room_id?: number;
     search?: string;
   }) {
-    const { page = 1, limit = 10, room_id, search } = params;
+    const { page = 1, limit = 10, room_id, pg_id, search } = params;
     const skip = (page - 1) * limit;
 
     const where: any = {
       is_deleted: false,
+      rooms: {
+        pg_id: params.pg_id,
+      },
     };
 
     if (room_id) {
       where.room_id = room_id;
     }
-
+    if (params.pg_id) {
+      where.rooms.pg_id = params.pg_id; // ✅ filter beds by PG ID through room
+    }
     if (search) {
       where.bed_no = { contains: search, mode: 'insensitive' };
     }

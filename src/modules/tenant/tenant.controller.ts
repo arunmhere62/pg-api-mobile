@@ -8,13 +8,17 @@ import {
   Param,
   Query,
   ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { TenantService } from './tenant.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
-import { CommonHeadersDecorator, CommonHeaders } from '../../common/decorators/common-headers.decorator';
+import { HeadersValidationGuard } from '../../common/guards/headers-validation.guard';
+import { RequireHeaders } from '../../common/decorators/require-headers.decorator';
+import { ValidatedHeaders } from '../../common/decorators/validated-headers.decorator';
 
 @Controller('tenants')
+@UseGuards(HeadersValidationGuard)
 export class TenantController {
   constructor(private readonly tenantService: TenantService) {}
 
@@ -24,9 +28,10 @@ export class TenantController {
    * Headers: pg_id, organization_id, user_id
    */
   @Post()
+  @RequireHeaders({ pg_id: true, organization_id: true, user_id: true })
   // @UseGuards(JwtAuthGuard) // TODO: Add authentication
   async create(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Body() createTenantDto: CreateTenantDto,
   ) {
     return this.tenantService.create(createTenantDto);
@@ -39,9 +44,10 @@ export class TenantController {
    * Query: page, limit, status, search, room_id, pending_rent, pending_advance
    */
   @Get()
+  @RequireHeaders({ pg_id: true })
   // @UseGuards(JwtAuthGuard) // TODO: Add authentication
   async findAll(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: string,
@@ -59,7 +65,7 @@ export class TenantController {
     return this.tenantService.findAll({
       page: pageNumber,
       limit: limitNumber,
-      pg_id: headers.pg_id,
+      pg_id: headers.pg_id!,
       status,
       search,
       room_id: roomId,
@@ -74,9 +80,10 @@ export class TenantController {
    * Headers: pg_id, organization_id, user_id
    */
   @Get(':id')
+  @RequireHeaders()
   // @UseGuards(JwtAuthGuard) // TODO: Add authentication
   async findOne(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.tenantService.findOne(id);
@@ -88,9 +95,10 @@ export class TenantController {
    * Headers: pg_id, organization_id, user_id
    */
   @Put(':id')
+  @RequireHeaders({ pg_id: true, organization_id: true, user_id: true })
   // @UseGuards(JwtAuthGuard) // TODO: Add authentication
   async update(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Param('id', ParseIntPipe) id: number,
     @Body() updateTenantDto: UpdateTenantDto,
   ) {
@@ -103,9 +111,10 @@ export class TenantController {
    * Headers: pg_id, organization_id, user_id
    */
   @Delete(':id')
+  @RequireHeaders({ pg_id: true, organization_id: true, user_id: true })
   // @UseGuards(JwtAuthGuard) // TODO: Add authentication
   async remove(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.tenantService.remove(id);
@@ -117,9 +126,10 @@ export class TenantController {
    * Headers: pg_id, organization_id, user_id
    */
   @Post(':id/checkout')
+  @RequireHeaders({ pg_id: true, organization_id: true, user_id: true })
   // @UseGuards(JwtAuthGuard) // TODO: Add authentication
   async checkout(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.tenantService.checkout(id);

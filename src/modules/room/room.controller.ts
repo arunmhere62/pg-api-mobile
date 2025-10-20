@@ -7,24 +7,29 @@ import {
   Param,
   Delete,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { RoomService } from './room.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
-import { CommonHeaders, CommonHeadersDecorator } from '../../common/decorators/common-headers.decorator';
+import { HeadersValidationGuard } from '../../common/guards/headers-validation.guard';
+import { RequireHeaders } from '../../common/decorators/require-headers.decorator';
+import { ValidatedHeaders } from '../../common/decorators/validated-headers.decorator';
 
 @Controller('rooms')
+@UseGuards(HeadersValidationGuard)
 export class RoomController {
   constructor(private readonly roomService: RoomService) {}
 
   /**
    * Create a new room
    * POST /api/v1/rooms
-   * Headers: pg_id, organization_id, user_id
+   * Headers: pg_id (required), organization_id (required), user_id (required)
    */
   @Post()
+  @RequireHeaders({ pg_id: true, organization_id: true, user_id: true })
   async create(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Body() createRoomDto: CreateRoomDto,
   ) {
     return this.roomService.create(createRoomDto);
@@ -33,12 +38,13 @@ export class RoomController {
   /**
    * Get all rooms with filters
    * GET /api/v1/rooms
-   * Headers: pg_id, organization_id, user_id
+   * Headers: pg_id (required), organization_id (optional), user_id (optional)
    * Query: page, limit, search
    */
   @Get()
+  @RequireHeaders({ pg_id: true })
   async findAll(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
@@ -49,7 +55,7 @@ export class RoomController {
     return this.roomService.findAll({
       page: pageNumber,
       limit: limitNumber,
-      pg_id: headers.pg_id,
+      pg_id: headers.pg_id!,
       search,
     });
   }
@@ -57,11 +63,12 @@ export class RoomController {
   /**
    * Get room by ID
    * GET /api/v1/rooms/:id
-   * Headers: pg_id, organization_id, user_id
+   * Headers: pg_id (optional), organization_id (optional), user_id (optional)
    */
   @Get(':id')
+  @RequireHeaders()
   async findOne(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Param('id') id: string,
   ) {
     return this.roomService.findOne(+id);
@@ -70,11 +77,12 @@ export class RoomController {
   /**
    * Update room
    * PATCH /api/v1/rooms/:id
-   * Headers: pg_id, organization_id, user_id
+   * Headers: pg_id (required), organization_id (required), user_id (required)
    */
   @Patch(':id')
+  @RequireHeaders({ pg_id: true, organization_id: true, user_id: true })
   async update(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Param('id') id: string,
     @Body() updateRoomDto: UpdateRoomDto,
   ) {
@@ -84,11 +92,12 @@ export class RoomController {
   /**
    * Delete room (soft delete)
    * DELETE /api/v1/rooms/:id
-   * Headers: pg_id, organization_id, user_id
+   * Headers: pg_id (required), organization_id (required), user_id (required)
    */
   @Delete(':id')
+  @RequireHeaders({ pg_id: true, organization_id: true, user_id: true })
   async remove(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Param('id') id: string,
   ) {
     return this.roomService.remove(+id);

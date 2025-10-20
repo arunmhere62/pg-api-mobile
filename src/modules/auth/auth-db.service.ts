@@ -313,25 +313,16 @@ export class AuthDbService {
           },
         });
 
-        // 2. Find or create ADMIN role for this organization
-        let role = await prisma.roles.findFirst({
+        // 2. Find existing ADMIN role (global role, not organization-specific)
+        const role = await prisma.roles.findFirst({
           where: {
             role_name: 'ADMIN',
-            organization_id: organization.s_no,
             is_deleted: false,
           },
         });
 
-        // If ADMIN role doesn't exist for this organization, create it
         if (!role) {
-          role = await prisma.roles.create({
-            data: {
-              role_name: 'ADMIN',
-              status: 'ACTIVE',
-              organization_id: organization.s_no,
-              is_deleted: false,
-            },
-          });
+          throw new BadRequestException('ADMIN role not found in the system. Please contact support.');
         }
 
         // 3. Create user (status INACTIVE until admin approval)

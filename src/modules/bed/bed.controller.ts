@@ -7,13 +7,17 @@ import {
   Param,
   Delete,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { BedService } from './bed.service';
 import { CreateBedDto } from './dto/create-bed.dto';
 import { UpdateBedDto } from './dto/update-bed.dto';
-import { CommonHeaders, CommonHeadersDecorator } from '../../common/decorators/common-headers.decorator';
+import { HeadersValidationGuard } from '../../common/guards/headers-validation.guard';
+import { RequireHeaders } from '../../common/decorators/require-headers.decorator';
+import { ValidatedHeaders } from '../../common/decorators/validated-headers.decorator';
 
 @Controller('beds')
+@UseGuards(HeadersValidationGuard)
 export class BedController {
   constructor(private readonly bedService: BedService) {}
 
@@ -23,8 +27,9 @@ export class BedController {
    * Headers: pg_id, organization_id, user_id
    */
   @Post()
+  @RequireHeaders({ pg_id: true, organization_id: true, user_id: true })
   async create(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Body() createBedDto: CreateBedDto,
   ) {
     return this.bedService.create(createBedDto);
@@ -37,8 +42,9 @@ export class BedController {
    * Query: page, limit, room_id, is_occupied, search
    */
   @Get()
+  @RequireHeaders({ pg_id: true })
   async findAll(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('room_id') room_id?: string,
@@ -49,6 +55,7 @@ export class BedController {
     const roomId = room_id ? parseInt(room_id, 10) : undefined;
 
     return this.bedService.findAll({
+      pg_id: headers.pg_id!,
       page: pageNumber,
       limit: limitNumber,
       room_id: roomId,
@@ -62,8 +69,9 @@ export class BedController {
    * Headers: pg_id, organization_id, user_id
    */
   @Get('room/:roomId')
+  @RequireHeaders({ pg_id: true })
   async findByRoomId(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Param('roomId') roomId: string,
   ) {
     return this.bedService.findByRoomId(+roomId);
@@ -75,8 +83,9 @@ export class BedController {
    * Headers: pg_id, organization_id, user_id
    */
   @Get(':id')
+  @RequireHeaders()
   async findOne(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Param('id') id: string,
   ) {
     return this.bedService.findOne(+id);
@@ -88,8 +97,9 @@ export class BedController {
    * Headers: pg_id, organization_id, user_id
    */
   @Patch(':id')
+  @RequireHeaders({ pg_id: true, organization_id: true, user_id: true })
   async update(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Param('id') id: string,
     @Body() updateBedDto: UpdateBedDto,
   ) {
@@ -102,8 +112,9 @@ export class BedController {
    * Headers: pg_id, organization_id, user_id
    */
   @Delete(':id')
+  @RequireHeaders({ pg_id: true, organization_id: true, user_id: true })
   async remove(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Param('id') id: string,
   ) {
     return this.bedService.remove(+id);

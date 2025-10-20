@@ -9,15 +9,19 @@ import {
   ParseIntPipe,
   HttpCode,
   HttpStatus,
-  Request,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
 import { PgLocationService } from './pg-location.service';
 import { CreatePgLocationDto } from './dto/create-pg-location.dto';
 import { UpdatePgLocationDto } from './dto/update-pg-location.dto';
+import { HeadersValidationGuard } from '../../common/guards/headers-validation.guard';
+import { RequireHeaders } from '../../common/decorators/require-headers.decorator';
+import { ValidatedHeaders } from '../../common/decorators/validated-headers.decorator';
 
 @ApiTags('pg-locations')
 @Controller('pg-locations')
+@UseGuards(HeadersValidationGuard)
 // @ApiBearerAuth() // Uncomment when JWT auth is implemented
 export class PgLocationController {
   constructor(private readonly pgLocationService: PgLocationService) {}
@@ -45,12 +49,9 @@ export class PgLocationController {
       },
     },
   })
-  async findAll(@Request() req: any) {
-    // Get userId and organizationId from headers
-    const userId = parseInt(req.headers['x-user-id']) || req.user?.s_no || 1;
-    const organizationId = parseInt(req.headers['x-organization-id']) || req.user?.organization_id || 1;
-
-    return this.pgLocationService.findAll(userId, organizationId);
+  @RequireHeaders({ user_id: true, organization_id: true })
+  async findAll(@ValidatedHeaders() headers: ValidatedHeaders) {
+    return this.pgLocationService.findAll(headers.user_id!, headers.organization_id!);
   }
 
   @Get('stats')
@@ -70,12 +71,9 @@ export class PgLocationController {
       },
     },
   })
-  async getStats(@Request() req: any) {
-    // Get userId and organizationId from headers
-    const userId = parseInt(req.headers['x-user-id']) || req.user?.s_no || 1;
-    const organizationId = parseInt(req.headers['x-organization-id']) || req.user?.organization_id || 1;
-
-    return this.pgLocationService.getStats(userId, organizationId);
+  @RequireHeaders({ user_id: true, organization_id: true })
+  async getStats(@ValidatedHeaders() headers: ValidatedHeaders) {
+    return this.pgLocationService.getStats(headers.user_id!, headers.organization_id!);
   }
 
   @Get(':id')
@@ -86,12 +84,12 @@ export class PgLocationController {
     description: 'PG location fetched successfully',
   })
   @ApiResponse({ status: 404, description: 'PG location not found' })
-  async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    // Get userId and organizationId from headers
-    const userId = parseInt(req.headers['x-user-id']) || req.user?.s_no || 1;
-    const organizationId = parseInt(req.headers['x-organization-id']) || req.user?.organization_id || 1;
-
-    return this.pgLocationService.findOne(id, userId, organizationId);
+  @RequireHeaders({ user_id: true, organization_id: true })
+  async findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @ValidatedHeaders() headers: ValidatedHeaders,
+  ) {
+    return this.pgLocationService.findOne(id, headers.user_id!, headers.organization_id!);
   }
 
   @Post()
@@ -115,12 +113,12 @@ export class PgLocationController {
     },
   })
   @ApiResponse({ status: 400, description: 'Bad request' })
-  async create(@Body() createPgLocationDto: CreatePgLocationDto, @Request() req: any) {
-    // Get userId and organizationId from headers
-    const userId = parseInt(req.headers['x-user-id']) || req.user?.s_no || 1;
-    const organizationId = parseInt(req.headers['x-organization-id']) || req.user?.organization_id || 1;
-
-    return this.pgLocationService.create(createPgLocationDto, userId, organizationId);
+  @RequireHeaders({ user_id: true, organization_id: true })
+  async create(
+    @Body() createPgLocationDto: CreatePgLocationDto,
+    @ValidatedHeaders() headers: ValidatedHeaders,
+  ) {
+    return this.pgLocationService.create(createPgLocationDto, headers.user_id!, headers.organization_id!);
   }
 
   @Put(':id')
@@ -132,16 +130,13 @@ export class PgLocationController {
   })
   @ApiResponse({ status: 404, description: 'PG location not found' })
   @ApiResponse({ status: 400, description: 'Bad request' })
+  @RequireHeaders({ user_id: true, organization_id: true })
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updatePgLocationDto: UpdatePgLocationDto,
-    @Request() req: any,
+    @ValidatedHeaders() headers: ValidatedHeaders,
   ) {
-    // Get userId and organizationId from headers
-    const userId = parseInt(req.headers['x-user-id']) || req.user?.s_no || 1;
-    const organizationId = parseInt(req.headers['x-organization-id']) || req.user?.organization_id || 1;
-
-    return this.pgLocationService.update(id, updatePgLocationDto, userId, organizationId);
+    return this.pgLocationService.update(id, updatePgLocationDto, headers.user_id!, headers.organization_id!);
   }
 
   @Delete(':id')
@@ -159,11 +154,11 @@ export class PgLocationController {
     },
   })
   @ApiResponse({ status: 404, description: 'PG location not found' })
-  async remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    // Get userId and organizationId from headers
-    const userId = parseInt(req.headers['x-user-id']) || req.user?.s_no || 1;
-    const organizationId = parseInt(req.headers['x-organization-id']) || req.user?.organization_id || 1;
-
-    return this.pgLocationService.remove(id, userId, organizationId);
+  @RequireHeaders({ user_id: true, organization_id: true })
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @ValidatedHeaders() headers: ValidatedHeaders,
+  ) {
+    return this.pgLocationService.remove(id, headers.user_id!, headers.organization_id!);
   }
 }

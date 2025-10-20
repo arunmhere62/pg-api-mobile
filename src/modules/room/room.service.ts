@@ -8,41 +8,89 @@ export class RoomService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Create a new room
+   * Create a new room or restore soft-deleted room
    */
   async create(createRoomDto: CreateRoomDto) {
     try {
-      const room = await this.prisma.rooms.create({
-        data: {
+      // Check if a soft-deleted room exists with the same pg_id and room_no
+      const existingDeletedRoom = await this.prisma.rooms.findFirst({
+        where: {
           pg_id: createRoomDto.pg_id,
           room_no: createRoomDto.room_no,
-          rent_price: createRoomDto.rent_price,
-          images: createRoomDto.images,
-        },
-        include: {
-          pg_locations: {
-            select: {
-              s_no: true,
-              location_name: true,
-            },
-          },
-          beds: {
-            where: {
-              is_deleted: false,
-            },
-            select: {
-              s_no: true,
-              bed_no: true,
-            },
-          },
+          is_deleted: true,
         },
       });
 
-      return {
-        success: true,
-        message: 'Room created successfully',
-        data: room,
-      };
+      let room;
+
+      if (existingDeletedRoom) {
+        // Restore the soft-deleted room by updating it
+        room = await this.prisma.rooms.update({
+          where: { s_no: existingDeletedRoom.s_no },
+          data: {
+            is_deleted: false,
+            rent_price: createRoomDto.rent_price,
+            images: createRoomDto.images,
+            updated_at: new Date(),
+          },
+          include: {
+            pg_locations: {
+              select: {
+                s_no: true,
+                location_name: true,
+              },
+            },
+            beds: {
+              where: {
+                is_deleted: false,
+              },
+              select: {
+                s_no: true,
+                bed_no: true,
+              },
+            },
+          },
+        });
+
+        return {
+          success: true,
+          message: 'Room restored successfully',
+          data: room,
+        };
+      } else {
+        // Create a new room
+        room = await this.prisma.rooms.create({
+          data: {
+            pg_id: createRoomDto.pg_id,
+            room_no: createRoomDto.room_no,
+            rent_price: createRoomDto.rent_price,
+            images: createRoomDto.images,
+          },
+          include: {
+            pg_locations: {
+              select: {
+                s_no: true,
+                location_name: true,
+              },
+            },
+            beds: {
+              where: {
+                is_deleted: false,
+              },
+              select: {
+                s_no: true,
+                bed_no: true,
+              },
+            },
+          },
+        });
+
+        return {
+          success: true,
+          message: 'Room created successfully',
+          data: room,
+        };
+      }
     } catch (error) {
       throw error;
     }
