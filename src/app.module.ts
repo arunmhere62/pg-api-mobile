@@ -6,6 +6,8 @@ import { LocationModule } from './modules/location/location.module';
 import { PgLocationModule } from './modules/pg-location/pg-location.module';
 import { OrganizationModule } from './modules/organization/organization.module';
 import { TenantModule } from './modules/tenant/tenant.module';
+import { RoomModule } from './modules/room/room.module';
+import { BedModule } from './modules/bed/bed.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import configuration from './config';
@@ -22,6 +24,8 @@ import configuration from './config';
     PgLocationModule,
     OrganizationModule,
     TenantModule,
+    RoomModule,
+    BedModule,
   ],
   controllers: [AppController],
   providers: [AppService],
