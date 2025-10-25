@@ -39,7 +39,7 @@ export class BedController {
    * Get all beds with filters
    * GET /api/v1/beds
    * Headers: pg_id, organization_id, user_id
-   * Query: page, limit, room_id, is_occupied, search
+   * Query: page, limit, room_id, only_unoccupied, search
    */
   @Get()
   @RequireHeaders({ pg_id: true })
@@ -48,17 +48,20 @@ export class BedController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('room_id') room_id?: string,
+    @Query('only_unoccupied') only_unoccupied?: string,
     @Query('search') search?: string,
   ) {
     const pageNumber = page ? parseInt(page, 10) : 1;
     const limitNumber = limit ? parseInt(limit, 10) : 100;
     const roomId = room_id ? parseInt(room_id, 10) : undefined;
+    const onlyUnoccupied = only_unoccupied === 'true';
 
     return this.bedService.findAll({
       pg_id: headers.pg_id!,
       page: pageNumber,
       limit: limitNumber,
       room_id: roomId,
+      only_unoccupied: onlyUnoccupied,
       search,
     });
   }

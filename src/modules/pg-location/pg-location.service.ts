@@ -246,6 +246,20 @@ export class PgLocationService {
       throw new NotFoundException('PG location not found');
     }
 
+    // Check if PG location has any rooms
+    const roomCount = await this.prisma.rooms.count({
+      where: {
+        pg_id: id,
+        is_deleted: false,
+      },
+    });
+
+    if (roomCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete PG location. It has ${roomCount} room(s) associated with it. Please delete all rooms first.`,
+      );
+    }
+
     try {
       await this.prisma.pg_locations.update({
         where: {

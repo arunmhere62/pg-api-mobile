@@ -119,19 +119,4 @@ export class TenantController {
   ) {
     return this.tenantService.remove(id);
   }
-
-  /**
-   * Check out tenant
-   * POST /api/v1/tenants/:id/checkout
-   * Headers: pg_id, organization_id, user_id
-   */
-  @Post(':id/checkout')
-  @RequireHeaders({ pg_id: true, organization_id: true, user_id: true })
-  // @UseGuards(JwtAuthGuard) // TODO: Add authentication
-  async checkout(
-    @ValidatedHeaders() headers: ValidatedHeaders,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.tenantService.checkout(id);
-  }
 }

@@ -8,7 +8,7 @@ export class BedService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Create a new bed
+   * Create a new bed or restore soft-deleted bed
    */
   async create(createBedDto: CreateBedDto) {
     try {
@@ -24,32 +24,71 @@ export class BedService {
         throw new NotFoundException(`Room with ID ${createBedDto.room_id} not found`);
       }
 
-      const bed = await this.prisma.beds.create({
-        data: {
+      // Check if a soft-deleted bed exists with the same room_id and bed_no
+      const existingDeletedBed = await this.prisma.beds.findFirst({
+        where: {
           room_id: createBedDto.room_id,
           bed_no: createBedDto.bed_no,
-          pg_id: createBedDto.pg_id,
-          images: createBedDto.images,
+          is_deleted: true,
         },
-        include: {
-          rooms: {
-            select: {
-              s_no: true,
-              room_no: true,
-              pg_locations: {
-                select: {
-                  s_no: true,
-                  location_name: true,
+      });
+
+      let bed;
+
+      if (existingDeletedBed) {
+        // Restore the soft-deleted bed by updating it
+        bed = await this.prisma.beds.update({
+          where: { s_no: existingDeletedBed.s_no },
+          data: {
+            is_deleted: false,
+            pg_id: createBedDto.pg_id,
+            images: createBedDto.images,
+            updated_at: new Date(),
+          },
+          include: {
+            rooms: {
+              select: {
+                s_no: true,
+                room_no: true,
+                pg_locations: {
+                  select: {
+                    s_no: true,
+                    location_name: true,
+                  },
                 },
               },
             },
           },
-        },
-      });
+        });
+      } else {
+        // Create a new bed
+        bed = await this.prisma.beds.create({
+          data: {
+            room_id: createBedDto.room_id,
+            bed_no: createBedDto.bed_no,
+            pg_id: createBedDto.pg_id,
+            images: createBedDto.images,
+          },
+          include: {
+            rooms: {
+              select: {
+                s_no: true,
+                room_no: true,
+                pg_locations: {
+                  select: {
+                    s_no: true,
+                    location_name: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+      }
 
       return {
         success: true,
-        message: 'Bed created successfully',
+        message: existingDeletedBed ? 'Bed restored successfully' : 'Bed created successfully',
         data: bed,
       };
     } catch (error) {
@@ -65,9 +104,10 @@ export class BedService {
     page?: number;
     limit?: number;
     room_id?: number;
+    only_unoccupied?: boolean;
     search?: string;
   }) {
-    const { page = 1, limit = 10, room_id, pg_id, search } = params;
+    const { page = 1, limit = 10, room_id, pg_id, search, only_unoccupied } = params;
     const skip = (page - 1) * limit;
 
     const where: any = {
@@ -85,6 +125,16 @@ export class BedService {
     }
     if (search) {
       where.bed_no = { contains: search, mode: 'insensitive' };
+    }
+    
+    // Filter only unoccupied beds (beds without active tenants)
+    if (only_unoccupied) {
+      where.tenants = {
+        none: {
+          status: 'ACTIVE',
+          is_deleted: false,
+        },
+      };
     }
 
     const [beds, total] = await Promise.all([

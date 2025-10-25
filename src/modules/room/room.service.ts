@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { PrismaService } from '@/prisma/prisma.service';
+import { ValidatedHeaders } from '@/common/decorators/validated-headers.decorator';
 
 @Injectable()
 export class RoomService {
@@ -268,7 +269,7 @@ export class RoomService {
   /**
    * Delete room (soft delete)
    */
-  async remove(id: number) {
+  async remove(id: number, headers: ValidatedHeaders) {
     // Check if room exists
     const existingRoom = await this.prisma.rooms.findFirst({
       where: {
@@ -281,7 +282,22 @@ export class RoomService {
       throw new NotFoundException(`Room with ID ${id} not found`);
     }
 
-    // Soft delete room and its beds
+    // Check if room has any beds
+    const bedCount = await this.prisma.beds.count({
+      where: {
+        pg_id: headers.pg_id,
+        room_id: id,
+        is_deleted: false,
+      },
+    });
+
+    if (bedCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete room. It has ${bedCount} bed(s) associated with it. Please delete all beds first.`,
+      );
+    }
+
+    // Soft delete room
     await this.prisma.$transaction([
       this.prisma.rooms.update({
         where: { s_no: id },

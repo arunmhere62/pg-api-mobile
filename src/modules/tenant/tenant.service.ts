@@ -541,55 +541,24 @@ export class TenantService {
       throw new NotFoundException(`Tenant with ID ${id} not found`);
     }
 
+    // Check if tenant has checked out
+    if (!tenant.check_out_date || tenant.status === 'ACTIVE') {
+      throw new BadRequestException(
+        'Cannot delete tenant who has not checked out. Please checkout the tenant first.',
+      );
+    }
+
     // Soft delete tenant
     await this.prisma.tenants.update({
       where: { s_no: id },
       data: {
         is_deleted: true,
-        status: 'INACTIVE',
-        check_out_date: new Date(),
       },
     });
 
     return {
       success: true,
       message: 'Tenant deleted successfully',
-    };
-  }
-
-  /**
-   * Check out tenant
-   */
-  async checkout(id: number) {
-    const tenant = await this.prisma.tenants.findFirst({
-      where: {
-        s_no: id,
-        is_deleted: false,
-      },
-    });
-
-    if (!tenant) {
-      throw new NotFoundException(`Tenant with ID ${id} not found`);
-    }
-
-    // Update tenant status
-    const updatedTenant = await this.prisma.tenants.update({
-      where: { s_no: id },
-      data: {
-        status: 'INACTIVE',
-        check_out_date: new Date(),
-      },
-      include: {
-        pg_locations: true,
-        rooms: true,
-        beds: true,
-      },
-    });
-
-    return {
-      success: true,
-      message: 'Tenant checked out successfully',
-      data: updatedTenant,
     };
   }
 

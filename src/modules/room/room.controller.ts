@@ -100,6 +100,6 @@ export class RoomController {
     @ValidatedHeaders() headers: ValidatedHeaders,
     @Param('id') id: string,
   ) {
-    return this.roomService.remove(+id);
+    return this.roomService.remove(+id, headers);
   }
 }
