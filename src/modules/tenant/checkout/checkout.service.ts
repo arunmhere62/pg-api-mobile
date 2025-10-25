@@ -16,10 +16,79 @@ export class CheckoutService {
         s_no: id,
         is_deleted: false,
       },
+      include: {
+        tenant_payments: {
+          where: {
+            is_deleted: false,
+          },
+          select: {
+            s_no: true,
+            status: true,
+            amount_paid: true,
+            payment_date: true,
+          },
+        },
+        advance_payments: {
+          where: {
+            is_deleted: false,
+          },
+          select: {
+            s_no: true,
+            status: true,
+            amount_paid: true,
+            payment_date: true,
+          },
+        },
+        refund_payments: {
+          where: {
+            is_deleted: false,
+          },
+          select: {
+            s_no: true,
+            status: true,
+            amount_paid: true,
+            payment_date: true,
+          },
+        },
+      },
     });
 
     if (!tenant) {
       throw new NotFoundException(`Tenant with ID ${id} not found`);
+    }
+
+    // Check if all payments are paid
+    const unpaidRentPayments = tenant.tenant_payments.filter(
+      (payment) => payment.status !== 'PAID'
+    );
+    const unpaidAdvancePayments = tenant.advance_payments.filter(
+      (payment) => payment.status !== 'PAID'
+    );
+    const unpaidRefundPayments = tenant.refund_payments.filter(
+      (payment) => payment.status !== 'PAID'
+    );
+
+    const totalUnpaidPayments = 
+      unpaidRentPayments.length + 
+      unpaidAdvancePayments.length + 
+      unpaidRefundPayments.length;
+
+    if (totalUnpaidPayments > 0) {
+      const unpaidDetails = [];
+      
+      if (unpaidRentPayments.length > 0) {
+        unpaidDetails.push(`${unpaidRentPayments.length} rent payment(s)`);
+      }
+      if (unpaidAdvancePayments.length > 0) {
+        unpaidDetails.push(`${unpaidAdvancePayments.length} advance payment(s)`);
+      }
+      if (unpaidRefundPayments.length > 0) {
+        unpaidDetails.push(`${unpaidRefundPayments.length} refund payment(s)`);
+      }
+
+      throw new BadRequestException(
+        `Cannot checkout tenant. There are ${totalUnpaidPayments} unpaid payment(s): ${unpaidDetails.join(', ')}. Please mark all payments as PAID before checkout.`
+      );
     }
 
     // Use provided checkout date or default to now
