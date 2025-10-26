@@ -17,6 +17,22 @@ export class TenantPaymentService {
         throw new NotFoundException(`Tenant with ID ${createTenantPaymentDto.tenant_id} not found`);
       }
 
+      // Validate start_date is not before tenant's check-in date
+      if (tenant.check_in_date && createTenantPaymentDto.start_date) {
+        const checkInDate = new Date(tenant.check_in_date);
+        const startDate = new Date(createTenantPaymentDto.start_date);
+        
+        // Set time to midnight for date-only comparison
+        checkInDate.setHours(0, 0, 0, 0);
+        startDate.setHours(0, 0, 0, 0);
+        
+        if (startDate < checkInDate) {
+          throw new BadRequestException(
+            `Payment start date (${createTenantPaymentDto.start_date}) cannot be before tenant's check-in date (${tenant.check_in_date.toISOString().split('T')[0]})`
+          );
+        }
+      }
+
       // Verify room exists
       const room = await this.prisma.rooms.findUnique({
         where: { s_no: createTenantPaymentDto.room_id },
@@ -184,6 +200,9 @@ export class TenantPaymentService {
                 tenant_id: true,
                 name: true,
                 phone_no: true,
+                is_deleted: true,
+                status: true,
+                check_out_date: true,
               },
             },
             rooms: {
@@ -209,9 +228,29 @@ export class TenantPaymentService {
         this.prisma.tenant_payments.count({ where }),
       ]);
 
+      // Add tenant unavailability reason
+      const enrichedData = payments.map(payment => {
+        let tenant_unavailable_reason = null;
+        
+        if (!payment.tenants) {
+          tenant_unavailable_reason = 'NOT_FOUND';
+        } else if (payment.tenants.is_deleted) {
+          tenant_unavailable_reason = 'DELETED';
+        } else if (payment.tenants.check_out_date) {
+          tenant_unavailable_reason = 'CHECKED_OUT';
+        } else if (payment.tenants.status === 'INACTIVE') {
+          tenant_unavailable_reason = 'INACTIVE';
+        }
+
+        return {
+          ...payment,
+          tenant_unavailable_reason,
+        };
+      });
+
       return {
         success: true,
-        data: payments,
+        data: enrichedData,
         pagination: {
           total,
           page,
@@ -294,6 +333,28 @@ export class TenantPaymentService {
 
       if (!existingPayment) {
         throw new NotFoundException(`Tenant payment with ID ${id} not found`);
+      }
+
+      // If start_date is being updated, validate against tenant's check-in date
+      if (updateTenantPaymentDto.start_date) {
+        const tenant = await this.prisma.tenants.findUnique({
+          where: { s_no: existingPayment.tenant_id },
+        });
+
+        if (tenant && tenant.check_in_date) {
+          const checkInDate = new Date(tenant.check_in_date);
+          const startDate = new Date(updateTenantPaymentDto.start_date);
+          
+          // Set time to midnight for date-only comparison
+          checkInDate.setHours(0, 0, 0, 0);
+          startDate.setHours(0, 0, 0, 0);
+          
+          if (startDate < checkInDate) {
+            throw new BadRequestException(
+              `Payment start date (${updateTenantPaymentDto.start_date}) cannot be before tenant's check-in date (${tenant.check_in_date.toISOString().split('T')[0]})`
+            );
+          }
+        }
       }
 
       const updateData: any = {};

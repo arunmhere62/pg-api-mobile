@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { CreateBedDto } from './dto/create-bed.dto';
 import { UpdateBedDto } from './dto/update-bed.dto';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -317,6 +317,20 @@ export class BedService {
 
     if (!existingBed) {
       throw new NotFoundException(`Bed with ID ${id} not found`);
+    }
+
+    // Prevent deletion if any active tenant is assigned to this bed
+    const activeTenant = await this.prisma.tenants.findFirst({
+      where: {
+        bed_id: id,
+        status: 'ACTIVE',
+        is_deleted: false,
+      },
+      select: { s_no: true },
+    });
+
+    if (activeTenant) {
+      throw new BadRequestException('Cannot delete bed while a tenant is assigned to it');
     }
 
     await this.prisma.beds.update({

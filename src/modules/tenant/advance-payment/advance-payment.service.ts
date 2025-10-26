@@ -182,6 +182,9 @@ export class AdvancePaymentService {
               tenant_id: true,
               name: true,
               phone_no: true,
+              is_deleted: true,
+              status: true,
+              check_out_date: true,
             },
           },
           rooms: {
@@ -212,9 +215,29 @@ export class AdvancePaymentService {
       this.prisma.advance_payments.count({ where }),
     ]);
 
+    // Add tenant unavailability reason
+    const enrichedData = advancePayments.map(payment => {
+      let tenant_unavailable_reason = null;
+      
+      if (!payment.tenants) {
+        tenant_unavailable_reason = 'NOT_FOUND';
+      } else if (payment.tenants.is_deleted) {
+        tenant_unavailable_reason = 'DELETED';
+      } else if (payment.tenants.check_out_date) {
+        tenant_unavailable_reason = 'CHECKED_OUT';
+      } else if (payment.tenants.status === 'INACTIVE') {
+        tenant_unavailable_reason = 'INACTIVE';
+      }
+
+      return {
+        ...payment,
+        tenant_unavailable_reason,
+      };
+    });
+
     return {
       success: true,
-      data: advancePayments,
+      data: enrichedData,
       pagination: {
         total,
         page,
