@@ -11,6 +11,8 @@ import { JwtTokenService } from './jwt.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { SignupDto } from './dto/signup.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class AuthDbService {
@@ -428,6 +430,157 @@ export class AuthDbService {
       phone,
       totalRecords: stats.length,
       records: stats,
+    };
+  }
+
+  /**
+   * Update user profile
+   */
+  async updateProfile(userId: number, updateProfileDto: UpdateProfileDto) {
+    // Check if user exists
+    const user = await this.prisma.user.findUnique({
+      where: { s_no: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Check if email is being changed and if it's already taken
+    if (updateProfileDto.email && updateProfileDto.email !== user.email) {
+      const existingEmail = await this.prisma.user.findFirst({
+        where: {
+          email: updateProfileDto.email,
+          s_no: { not: userId },
+        },
+      });
+
+      if (existingEmail) {
+        throw new BadRequestException('Email already in use');
+      }
+    }
+
+    // Check if phone is being changed and if it's already taken
+    if (updateProfileDto.phone && updateProfileDto.phone !== user.phone) {
+      const existingPhone = await this.prisma.user.findFirst({
+        where: {
+          phone: updateProfileDto.phone,
+          s_no: { not: userId },
+        },
+      });
+
+      if (existingPhone) {
+        throw new BadRequestException('Phone number already in use');
+      }
+    }
+
+    // Update user profile
+    const updatedUser = await this.prisma.user.update({
+      where: { s_no: userId },
+      data: {
+        name: updateProfileDto.name,
+        email: updateProfileDto.email,
+        phone: updateProfileDto.phone,
+        address: updateProfileDto.address,
+        gender: updateProfileDto.gender,
+        state_id: updateProfileDto.state_id,
+        city_id: updateProfileDto.city_id,
+        profile_images: updateProfileDto.profile_images,
+      },
+      select: {
+        s_no: true,
+        name: true,
+        email: true,
+        phone: true,
+        address: true,
+        gender: true,
+        state_id: true,
+        city_id: true,
+        profile_images: true,
+        role_id: true,
+        organization_id: true,
+        status: true,
+        roles: {
+          select: {
+            role_name: true,
+          },
+        },
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Profile updated successfully',
+      data: {
+        ...updatedUser,
+        role_name: updatedUser.roles.role_name,
+      },
+    };
+  }
+
+  /**
+   * Change user password
+   */
+  async changePassword(userId: number, changePasswordDto: ChangePasswordDto) {
+    const { currentPassword, newPassword } = changePasswordDto;
+
+    // Check if user exists
+    const user = await this.prisma.user.findUnique({
+      where: { s_no: userId },
+      select: {
+        s_no: true,
+        password: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Verify current password (no encryption for now)
+    if (user.password !== currentPassword) {
+      throw new BadRequestException('Current password is incorrect');
+    }
+
+    // Update password (no encryption for now)
+    await this.prisma.user.update({
+      where: { s_no: userId },
+      data: {
+        password: newPassword,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Password changed successfully',
+    };
+  }
+
+  /**
+   * Get all users for an organization
+   */
+  async getUsers(organizationId: number) {
+    const users = await this.prisma.user.findMany({
+      where: {
+        organization_id: organizationId,
+        is_deleted: false,
+      },
+      select: {
+        s_no: true,
+        name: true,
+        email: true,
+        phone: true,
+        role_id: true,
+        status: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+
+    return {
+      success: true,
+      data: users,
     };
   }
 }

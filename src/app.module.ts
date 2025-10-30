@@ -8,6 +8,8 @@ import { OrganizationModule } from './modules/organization/organization.module';
 import { TenantModule } from './modules/tenant/tenant.module';
 import { RoomModule } from './modules/room/room.module';
 import { BedModule } from './modules/bed/bed.module';
+import { ExpenseModule } from './modules/expense/expense.module';
+import { EmployeeSalaryModule } from './modules/employee-salary/employee-salary.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import configuration from './config';
@@ -26,6 +28,8 @@ import configuration from './config';
     TenantModule,
     RoomModule,
     BedModule,
+    ExpenseModule,
+    EmployeeSalaryModule,
   ],
   controllers: [AppController],
   providers: [AppService],
