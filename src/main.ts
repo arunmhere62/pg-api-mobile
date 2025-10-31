@@ -14,8 +14,14 @@ async function bootstrap() {
   // Global prefix
   app.setGlobalPrefix('api/v1');
 
-  // Enable CORS
-  app.enableCors();
+  // Enable CORS - Allow all origins for development
+  app.enableCors({
+    origin: true,  // Allow all origins
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id', 'X-Organization-Id', 'X-PG-Location-Id'],
+    exposedHeaders: ['Authorization'],
+  });
 
   // Global validation pipe
   app.useGlobalPipes(
@@ -43,7 +49,7 @@ async function bootstrap() {
     },
   });
 
-  const port = process.env.PORT || 3000;
+  const port = process.env.PORT || 5000;
   await app.listen(port);
   
   console.log(`🚀 Application is running on: http://localhost:${port}`);

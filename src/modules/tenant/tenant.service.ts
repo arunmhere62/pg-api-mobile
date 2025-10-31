@@ -272,16 +272,38 @@ export class TenantService {
       },
     });
 
-    // Calculate pending payments for each tenant
+    // Calculate pending payments and check for unpaid months for each tenant
     const tenantsWithPendingPayments = await Promise.all(
       tenants.map(async (tenant) => {
         try {
           const pendingPayment = await this.pendingPaymentService.calculateTenantPendingPayment(
             tenant.s_no,
           );
+          
+          // Check if check-in date is covered by any payment period
+          let hasUnpaidMonths = false;
+          if (tenant.check_in_date && tenant.tenant_payments) {
+            const checkInDate = new Date(tenant.check_in_date);
+            checkInDate.setHours(0, 0, 0, 0);
+            
+            const checkInCovered = tenant.tenant_payments.some((payment) => {
+              const startDate = new Date(payment.start_date);
+              const endDate = new Date(payment.end_date);
+              startDate.setHours(0, 0, 0, 0);
+              endDate.setHours(0, 0, 0, 0);
+              return checkInDate >= startDate && checkInDate <= endDate;
+            });
+            
+            hasUnpaidMonths = !checkInCovered;
+          } else if (tenant.check_in_date && (!tenant.tenant_payments || tenant.tenant_payments.length === 0)) {
+            // No payments at all
+            hasUnpaidMonths = true;
+          }
+          
           return {
             ...tenant,
             pending_payment: pendingPayment,
+            has_unpaid_months: hasUnpaidMonths,
           };
         } catch (error) {
           // If pending payment calculation fails, return tenant without it

@@ -24,6 +24,21 @@ export class BedService {
         throw new NotFoundException(`Room with ID ${createBedDto.room_id} not found`);
       }
 
+      // Check if an active bed already exists with the same room_id and bed_no
+      const existingActiveBed = await this.prisma.beds.findFirst({
+        where: {
+          room_id: createBedDto.room_id,
+          bed_no: createBedDto.bed_no,
+          is_deleted: false,
+        },
+      });
+
+      if (existingActiveBed) {
+        throw new BadRequestException(
+          `Bed number "${createBedDto.bed_no}" already exists in this room. Please use a different bed number.`
+        );
+      }
+
       // Check if a soft-deleted bed exists with the same room_id and bed_no
       const existingDeletedBed = await this.prisma.beds.findFirst({
         where: {
@@ -92,6 +107,17 @@ export class BedService {
         data: bed,
       };
     } catch (error) {
+      // Re-throw known exceptions
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
+      // Handle Prisma unique constraint errors
+      if (error.code === 'P2002') {
+        throw new BadRequestException(
+          `Bed number "${createBedDto.bed_no}" already exists in this room. Please use a different bed number.`
+        );
+      }
+      // Re-throw other errors
       throw error;
     }
   }
@@ -159,14 +185,35 @@ export class BedService {
               },
             },
           },
+          tenants: {
+            where: {
+              status: 'ACTIVE',
+              OR: [
+                { is_deleted: false },
+                { is_deleted: null },
+              ],
+            },
+            select: {
+              s_no: true,
+              name: true,
+              phone_no: true,
+              status: true,
+            },
+          },
         },
       }),
       this.prisma.beds.count({ where }),
     ]);
 
+    // Add is_occupied flag based on active tenants
+    const bedsWithStatus = beds.map(bed => ({
+      ...bed,
+      is_occupied: bed.tenants && bed.tenants.length > 0,
+    }));
+
     return {
       success: true,
-      data: beds,
+      data: bedsWithStatus,
       pagination: {
         page,
         limit,
@@ -196,12 +243,33 @@ export class BedService {
             room_no: true,
           },
         },
+        tenants: {
+          where: {
+            status: 'ACTIVE',
+            OR: [
+              { is_deleted: false },
+              { is_deleted: null },
+            ],
+          },
+          select: {
+            s_no: true,
+            name: true,
+            phone_no: true,
+            status: true,
+          },
+        },
       },
     });
 
+    // Add is_occupied flag based on active tenants
+    const bedsWithStatus = beds.map(bed => ({
+      ...bed,
+      is_occupied: bed.tenants && bed.tenants.length > 0,
+    }));
+
     return {
       success: true,
-      data: beds,
+      data: bedsWithStatus,
     };
   }
 

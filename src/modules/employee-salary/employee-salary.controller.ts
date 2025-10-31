@@ -10,12 +10,15 @@ import {
   ParseIntPipe,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { EmployeeSalaryService } from './employee-salary.service';
 import { CreateEmployeeSalaryDto } from './dto/create-employee-salary.dto';
 import { UpdateEmployeeSalaryDto } from './dto/update-employee-salary.dto';
-import { CommonHeadersDecorator, CommonHeaders } from '../../common/decorators/common-headers.decorator';
+import { HeadersValidationGuard } from '../../common/guards/headers-validation.guard';
+import { RequireHeaders } from '../../common/decorators/require-headers.decorator';
+import { ValidatedHeaders } from '../../common/decorators/validated-headers.decorator';
 
 @ApiTags('employee-salary')
 @Controller('employee-salary')
@@ -27,11 +30,13 @@ export class EmployeeSalaryController {
   @ApiOperation({ summary: 'Create a new employee salary record' })
   @ApiResponse({ status: 201, description: 'Salary record created successfully' })
   @ApiResponse({ status: 400, description: 'Bad request' })
+  @UseGuards(HeadersValidationGuard)
+  @RequireHeaders({ pg_id: true, organization_id: true, user_id: true })
   create(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Body() createDto: CreateEmployeeSalaryDto,
   ) {
-    return this.employeeSalaryService.create(headers.pg_id, createDto);
+    return this.employeeSalaryService.create(headers.pg_id!, createDto);
   }
 
   @Get()
@@ -39,16 +44,16 @@ export class EmployeeSalaryController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Salary records retrieved successfully' })
+  @UseGuards(HeadersValidationGuard)
+  @RequireHeaders({ pg_id: true })
   findAll(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    console.log('📍 Employee Salary - Headers:', headers);
-    console.log('📍 Employee Salary - PG ID:', headers.pg_id);
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 10;
-    return this.employeeSalaryService.findAll(headers.pg_id, pageNum, limitNum);
+    return this.employeeSalaryService.findAll(headers.pg_id!, pageNum, limitNum);
   }
 
   @Get('employee/:userId')
@@ -71,12 +76,14 @@ export class EmployeeSalaryController {
   @ApiQuery({ name: 'startMonth', required: false, type: String })
   @ApiQuery({ name: 'endMonth', required: false, type: String })
   @ApiResponse({ status: 200, description: 'Statistics retrieved successfully' })
+  @UseGuards(HeadersValidationGuard)
+  @RequireHeaders({ pg_id: true })
   getStats(
-    @CommonHeadersDecorator() headers: CommonHeaders,
+    @ValidatedHeaders() headers: ValidatedHeaders,
     @Query('startMonth') startMonth?: string,
     @Query('endMonth') endMonth?: string,
   ) {
-    return this.employeeSalaryService.getStats(headers.pg_id, startMonth, endMonth);
+    return this.employeeSalaryService.getStats(headers.pg_id!, startMonth, endMonth);
   }
 
   @Get(':id')

@@ -44,8 +44,6 @@ export class ExpenseController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    console.log('📍 Expenses - Headers:', headers);
-    console.log('📍 Expenses - PG ID:', headers.pg_id);
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 10;
     return this.expenseService.findAll(headers.pg_id, pageNum, limitNum);

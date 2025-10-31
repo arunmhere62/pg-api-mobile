@@ -583,4 +583,36 @@ export class AuthDbService {
       data: users,
     };
   }
+
+  /**
+   * Get all roles for an organization (excluding Super Admin)
+   */
+  async getRoles(organizationId: number) {
+    console.log('📋 getRoles called with organization_id:', organizationId);
+    
+    const roles = await this.prisma.roles.findMany({
+      where: {
+        is_deleted: false,
+        role_name: {
+          not: 'SUPER_ADMIN',
+        },
+        status: 'ACTIVE',
+      },
+      select: {
+        s_no: true,
+        role_name: true,
+        status: true,
+      },
+      orderBy: {
+        role_name: 'asc',
+      },
+    });
+
+    console.log('✅ Found roles:', roles.length, roles);
+
+    return {
+      success: true,
+      data: roles,
+    };
+  }
 }

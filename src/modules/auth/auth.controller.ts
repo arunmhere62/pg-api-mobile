@@ -123,4 +123,15 @@ export class AuthController {
   async getUsers(@CommonHeadersDecorator() headers: CommonHeaders) {
     return this.authService.getUsers(headers.organization_id);
   }
+
+  @Get('roles')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get all roles for organization (excluding Super Admin)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Roles retrieved successfully',
+  })
+  async getRoles(@CommonHeadersDecorator() headers: CommonHeaders) {
+    return this.authService.getRoles(headers.organization_id);
+  }
 }

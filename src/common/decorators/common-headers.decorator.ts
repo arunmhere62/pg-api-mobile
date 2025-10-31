@@ -12,9 +12,9 @@ export const CommonHeadersDecorator = createParamDecorator(
     const headers = request.headers;
 
     return {
-      pg_id: headers['X-PG-Location-Id'] ? parseInt(headers['X-PG-Location-Id'], 10) : undefined,
-      organization_id: headers['X-Organization-Id'] ? parseInt(headers['X-Organization-Id'], 10) : undefined,
-      user_id: headers['X-User-Id'] ? parseInt(headers['X-User-Id'], 10) : undefined,
+      pg_id: headers['x-pg-location-id'] ? parseInt(headers['x-pg-location-id'], 10) : undefined,
+      organization_id: headers['x-organization-id'] ? parseInt(headers['x-organization-id'], 10) : undefined,
+      user_id: headers['x-user-id'] ? parseInt(headers['x-user-id'], 10) : undefined,
     };
   },
 );
