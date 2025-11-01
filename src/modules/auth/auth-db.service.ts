@@ -220,6 +220,15 @@ export class AuthDbService {
                          user.roles.role_name.toLowerCase() === 'super_admin' ||
                          user.roles.role_name.toLowerCase() === 'superadmin';
 
+    // Log user data for debugging
+    console.log('🔍 User data from DB:', {
+      s_no: user.s_no,
+      name: user.name,
+      organization_id: user.organization_id,
+      role_name: user.roles.role_name,
+      isSuperAdmin,
+    });
+
     // Build user response object
     const userResponse: any = {
       s_no: user.s_no,
@@ -228,6 +237,7 @@ export class AuthDbService {
       phone: user.phone,
       role_id: user.role_id,
       role_name: user.roles.role_name,
+      organization_id: user.organization_id, // Always include, even if null
       status: user.status,
       address: user.address,
       city_id: user.city_id,
@@ -235,27 +245,38 @@ export class AuthDbService {
       gender: user.gender,
     };
 
-    // Add organization details only if not superadmin
-    if (!isSuperAdmin && user.organization_id) {
+    // Add organization name if organization_id exists
+    if (user.organization_id) {
       // Fetch organization details
       const organization = await this.prisma.organization.findUnique({
         where: { s_no: user.organization_id },
         select: { s_no: true, name: true },
       });
 
-      userResponse.organization_id = user.organization_id;
       userResponse.organization_name = organization?.name;
+      console.log('✅ Organization found:', organization?.name);
+    } else {
+      console.log('⚠️ User has no organization_id in database');
     }
 
     // Generate JWT tokens
     const tokens = await this.jwtTokenService.generateTokens(user, ipAddress);
 
-    return {
+    const response = {
       success: true,
       message: 'Login successful',
       user: userResponse,
       ...tokens, // Spread tokens (access_token, refresh_token, token_type, expires_in)
     };
+
+    console.log('📤 Login response user object:', {
+      s_no: userResponse.s_no,
+      name: userResponse.name,
+      organization_id: userResponse.organization_id,
+      role_name: userResponse.role_name,
+    });
+
+    return response;
   }
 
   /**

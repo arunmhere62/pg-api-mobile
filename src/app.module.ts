@@ -13,6 +13,8 @@ import { EmployeeSalaryModule } from './modules/employee-salary/employee-salary.
 import { EmployeeModule } from './modules/employee/employee.module';
 import { VisitorModule } from './modules/visitor/visitor.module';
 import { TicketModule } from './modules/ticket/ticket.module';
+import { NotificationModule } from './modules/notification/notification.module';
+import { S3Module } from './s3/s3.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import configuration from './config';
@@ -36,6 +38,8 @@ import configuration from './config';
     EmployeeModule,
     VisitorModule,
     TicketModule,
+    NotificationModule,
+    S3Module,
   ],
   controllers: [AppController],
   providers: [AppService],
