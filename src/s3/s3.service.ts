@@ -6,14 +6,29 @@ export class S3Service {
   private s3: AWS.S3;
 
   constructor() {
-    // Configure AWS S3
+    // Configure AWS S3 from environment variables
+    const accessKeyId = process.env.AWS_ACCESS_KEY_ID || 'AKIA5QELDK32OFK7YBRL';
+    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || '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';
+    const region = process.env.AWS_REGION || 'ap-south-1';
+
     AWS.config.update({
-      accessKeyId: 'AKIA5QELDK32OFK7YBRL',
-      secretAccessKey: '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',
-      region: 'ap-south-1',
+      accessKeyId,
+      secretAccessKey,
+      region,
     });
 
-    this.s3 = new AWS.S3();
+    this.s3 = new AWS.S3({
+      accessKeyId,
+      secretAccessKey,
+      region,
+      signatureVersion: 'v4',
+    });
+    
+    console.log('S3 Service initialized:', {
+      region,
+      accessKeyId: accessKeyId.substring(0, 10) + '...',
+      bucket: 'indianpgmanagement'
+    });
   }
 
   async uploadFile(uploadData: {

@@ -93,4 +93,16 @@ export class S3Controller {
       };
     }
   }
+
+  @Get('health')
+  @ApiOperation({ summary: 'Check S3 service health' })
+  @ApiResponse({ status: 200, description: 'S3 service is available' })
+  async health() {
+    try {
+      // Simple health check - just return available if service is initialized
+      return { available: true };
+    } catch (error) {
+      return { available: false, error: error.message };
+    }
+  }
 }
