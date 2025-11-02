@@ -1,0 +1,40 @@
+name: Deploy to Hostinger
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Deploy to Hostinger via SSH
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USERNAME }}
+        password: ${{ secrets.SSH_PASSWORD }}
+        port: ${{ secrets.SSH_PORT }}
+        script: |
+          cd ~/public_html/api
+          git pull origin main
+          npm install --production
+          npm run build
+          npm run prisma:generate
+          npm run prisma:migrate:deploy
+          pm2 restart pg-api || npm run start:pm2
+          pm2 save
+          echo "Deployment completed successfully!"
+    
+    - name: Deployment Status
+      if: success()
+      run: echo "✅ Deployment to Hostinger successful!"
+    
+    - name: Deployment Failed
+      if: failure()
+      run: echo "❌ Deployment failed. Check logs above."

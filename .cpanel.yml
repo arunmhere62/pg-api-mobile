@@ -1,0 +1,12 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/YOUR_ACTUAL_USERNAME/public_html/api
+    - /bin/cp -R * $DEPLOYPATH
+    - cd $DEPLOYPATH
+    - npm install --production
+    - npm run build
+    - npm run prisma:generate
+    - npm run prisma:migrate:deploy
+    - pm2 restart pg-api || npm run start:pm2
+    - pm2 save
