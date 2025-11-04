@@ -157,6 +157,19 @@ Move in package.json:
 }
 ```
 
+### Issue: "prisma: not found"
+
+**Cause:** Prisma is in devDependencies, but Render doesn't install dev deps
+
+**Solution:** Move `prisma` to `dependencies` in package.json
+
+```json
+"dependencies": {
+  "prisma": "^5.8.0",
+  "@prisma/client": "^5.8.0"
+}
+```
+
 ### Issue: "Prisma Client not generated"
 
 **Solution:** Build command must include `prisma generate`
