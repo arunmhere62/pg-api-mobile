@@ -5,6 +5,9 @@ import { AuthController } from './auth.controller';
 import { AuthDbService } from './auth-db.service';
 import { SmsService } from './sms.service';
 import { JwtTokenService } from './jwt.service';
+import { OtpStrategyFactory } from './strategies/otp-strategy.factory';
+import { ProductionOtpStrategy } from './strategies/production-otp.strategy';
+import { DevelopmentOtpStrategy } from './strategies/development-otp.strategy';
 
 @Module({
   imports: [
@@ -20,7 +23,14 @@ import { JwtTokenService } from './jwt.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthDbService, SmsService, JwtTokenService],
-  exports: [AuthDbService, SmsService, JwtTokenService],
+  providers: [
+    AuthDbService,
+    SmsService,
+    JwtTokenService,
+    OtpStrategyFactory,
+    ProductionOtpStrategy,
+    DevelopmentOtpStrategy,
+  ],
+  exports: [AuthDbService, SmsService, JwtTokenService, OtpStrategyFactory],
 })
 export class AuthModule {}

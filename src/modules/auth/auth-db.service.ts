@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SmsService } from './sms.service';
 import { JwtTokenService } from './jwt.service';
+import { OtpStrategyFactory } from './strategies/otp-strategy.factory';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { SignupDto } from './dto/signup.dto';
@@ -24,6 +25,7 @@ export class AuthDbService {
     private smsService: SmsService,
     private jwtTokenService: JwtTokenService,
     private configService: ConfigService,
+    private otpStrategyFactory: OtpStrategyFactory,
   ) {
     // Get configuration based on environment
     this.OTP_EXPIRY_MINUTES = this.configService.get<number>('app.auth.otpExpiryMinutes', 5);
@@ -105,8 +107,9 @@ export class AuthDbService {
       });
     }
 
-    // Send OTP via SMS
-    const smsSent = await this.smsService.sendOtp(phone, otp);
+    // Send OTP via SMS using strategy pattern
+    const otpStrategy = this.otpStrategyFactory.getStrategy();
+    const smsSent = await otpStrategy.sendOtp(phone, otp);
 
     if (!smsSent) {
       throw new BadRequestException('Failed to send OTP. Please try again.');
@@ -163,8 +166,11 @@ export class AuthDbService {
       );
     }
 
-    // Verify OTP
-    if (otpRecord.otp !== otp) {
+    // Verify OTP using strategy pattern
+    const otpStrategy = this.otpStrategyFactory.getStrategy();
+    const isValid = otpStrategy.verifyOtp(phone, otp, otpRecord.otp);
+
+    if (!isValid) {
       await this.prisma.otp_verifications.update({
         where: { s_no: otpRecord.s_no },
         data: { attempts: otpRecord.attempts + 1 },
