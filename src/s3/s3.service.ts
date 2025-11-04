@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import * as AWS from 'aws-sdk';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 
 @Injectable()
 export class S3Service {
-  private s3: AWS.S3;
+  private s3Client: S3Client;
 
   constructor() {
     // Configure AWS S3 from environment variables
@@ -11,17 +11,12 @@ export class S3Service {
     const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || 'nhcOwHlNS9sbCH6ex0wIKodnVGMh8F2R4rqu6OxI';
     const region = process.env.AWS_REGION || 'ap-south-1';
 
-    AWS.config.update({
-      accessKeyId,
-      secretAccessKey,
+    this.s3Client = new S3Client({
       region,
-    });
-
-    this.s3 = new AWS.S3({
-      accessKeyId,
-      secretAccessKey,
-      region,
-      signatureVersion: 'v4',
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
     });
     
     console.log('S3 Service initialized:', {
@@ -37,57 +32,65 @@ export class S3Service {
     fileData: string;
     isPublic: boolean;
     bucket: string;
-  }): Promise<AWS.S3.ManagedUpload.SendData> {
+  }): Promise<{ Location: string; ETag?: string; Bucket: string; Key: string }> {
     const { key, contentType, fileData, isPublic, bucket } = uploadData;
 
     // Convert base64 to buffer
     const buffer = Buffer.from(fileData, 'base64');
 
-    const params: AWS.S3.PutObjectRequest = {
+    const command = new PutObjectCommand({
       Bucket: bucket,
       Key: key,
       Body: buffer,
       ContentType: contentType,
       // ACL removed - bucket doesn't support ACLs, uses default permissions
-    };
+    });
 
     console.log('Uploading to S3:', { bucket, key, contentType, size: buffer.length });
 
-    return this.s3.upload(params).promise();
+    const response = await this.s3Client.send(command);
+    
+    // Return v2-compatible response format
+    return {
+      Location: `https://${bucket}.s3.${process.env.AWS_REGION || 'ap-south-1'}.amazonaws.com/${key}`,
+      ETag: response.ETag,
+      Bucket: bucket,
+      Key: key,
+    };
   }
 
   async deleteFile(deleteData: {
     key: string;
     bucket: string;
-  }): Promise<AWS.S3.DeleteObjectOutput> {
+  }): Promise<any> {
     const { key, bucket } = deleteData;
 
-    const params: AWS.S3.DeleteObjectRequest = {
+    const command = new DeleteObjectCommand({
       Bucket: bucket,
       Key: key,
-    };
+    });
 
     console.log('Deleting from S3:', { bucket, key });
 
-    return this.s3.deleteObject(params).promise();
+    return this.s3Client.send(command);
   }
 
   async deleteMultipleFiles(deleteData: {
     keys: string[];
     bucket: string;
-  }): Promise<AWS.S3.DeleteObjectsOutput> {
+  }): Promise<any> {
     const { keys, bucket } = deleteData;
 
-    const params: AWS.S3.DeleteObjectsRequest = {
+    const command = new DeleteObjectsCommand({
       Bucket: bucket,
       Delete: {
         Objects: keys.map(key => ({ Key: key })),
       },
-    };
+    });
 
     console.log('Bulk deleting from S3:', { bucket, keys });
 
-    return this.s3.deleteObjects(params).promise();
+    return this.s3Client.send(command);
   }
 
   async fileExists(query: {
@@ -96,16 +99,16 @@ export class S3Service {
   }): Promise<boolean> {
     const { key, bucket } = query;
 
-    const params: AWS.S3.HeadObjectRequest = {
+    const command = new HeadObjectCommand({
       Bucket: bucket,
       Key: key,
-    };
+    });
 
     try {
-      await this.s3.headObject(params).promise();
+      await this.s3Client.send(command);
       return true;
     } catch (error) {
-      if (error.code === 'NotFound') {
+      if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
         return false;
       }
       throw error;
