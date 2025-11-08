@@ -1,0 +1,220 @@
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CCAvenuePaymentResponse } from './ccavenue.service';
+
+export interface CreatePaymentRecordDto {
+  orderId: string;
+  userId: number;
+  organizationId: number;
+  planId: number;
+  amount: string;
+  currency: string;
+  paymentType: 'NEW_SUBSCRIPTION' | 'RENEWAL' | 'UPGRADE';
+  status: 'INITIATED' | 'SUCCESS' | 'FAILURE' | 'ABORTED' | 'PENDING';
+  metadata?: any;
+}
+
+export interface UpdatePaymentRecordDto {
+  status: 'INITIATED' | 'SUCCESS' | 'FAILURE' | 'ABORTED' | 'PENDING';
+  trackingId?: string;
+  bankRefNo?: string;
+  paymentMode?: string;
+  statusCode?: string;
+  statusMessage?: string;
+  failureMessage?: string;
+  responseData?: any;
+}
+
+@Injectable()
+export class PaymentGatewayService {
+  private readonly logger = new Logger(PaymentGatewayService.name);
+
+  constructor(private prisma: PrismaService) {}
+
+  /**
+   * Create a new subscription payment record
+   */
+  async createPaymentRecord(data: CreatePaymentRecordDto) {
+    this.logger.log(`Creating subscription payment record for order: ${data.orderId}`);
+
+    const paymentRecord = await this.prisma.subscription_payments.create({
+      data: {
+        order_id: data.orderId,
+        user_id: data.userId,
+        organization_id: data.organizationId,
+        plan_id: data.planId,
+        amount: data.amount,
+        currency: data.currency,
+        payment_type: data.paymentType,
+        status: data.status,
+        metadata: data.metadata || null,
+      },
+    });
+
+    this.logger.log(`Subscription payment record created: ${paymentRecord.s_no}`);
+    return paymentRecord;
+  }
+
+  /**
+   * Update subscription payment record with response from CCAvenue
+   */
+  async updatePaymentRecord(orderId: string, data: UpdatePaymentRecordDto) {
+    this.logger.log(`Updating subscription payment record for order: ${orderId}`);
+
+    await this.prisma.subscription_payments.update({
+      where: { order_id: orderId },
+      data: {
+        status: data.status,
+        tracking_id: data.trackingId,
+        bank_ref_no: data.bankRefNo,
+        payment_mode: data.paymentMode,
+        status_code: data.statusCode,
+        status_message: data.statusMessage,
+        failure_message: data.failureMessage,
+        response_data: data.responseData || null,
+      },
+    });
+
+    this.logger.log(`Subscription payment record updated for order: ${orderId}`);
+  }
+
+  /**
+   * Get subscription payment by order ID
+   */
+  async getPaymentByOrderId(orderId: string) {
+    this.logger.log(`Fetching subscription payment record for order: ${orderId}`);
+
+    const payment = await this.prisma.subscription_payments.findUnique({
+      where: { order_id: orderId },
+      include: {
+        subscription_plans: true,
+        user_subscriptions: true,
+      },
+    });
+
+    if (!payment) {
+      throw new NotFoundException(`Payment with order ID ${orderId} not found`);
+    }
+
+    return payment;
+  }
+
+  /**
+   * Process successful subscription payment - Create/Update user subscription
+   */
+  async processSuccessfulPayment(paymentResponse: CCAvenuePaymentResponse) {
+    this.logger.log(`Processing successful subscription payment for order: ${paymentResponse.orderId}`);
+
+    try {
+      // Get payment record
+      const payment = await this.getPaymentByOrderId(paymentResponse.orderId);
+
+      // Get plan details
+      const plan = await this.prisma.subscription_plans.findUnique({
+        where: { s_no: payment.plan_id },
+      });
+
+      if (!plan) {
+        throw new NotFoundException('Subscription plan not found');
+      }
+
+      // Calculate subscription dates
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + plan.duration);
+
+      // Create or update user subscription
+      const subscription = await this.prisma.user_subscriptions.create({
+        data: {
+          user_id: payment.user_id,
+          organization_id: payment.organization_id,
+          plan_id: payment.plan_id,
+          status: 'ACTIVE',
+          start_date: startDate,
+          end_date: endDate,
+          auto_renew: false,
+        },
+      });
+
+      // Link subscription to payment
+      await this.prisma.subscription_payments.update({
+        where: { order_id: paymentResponse.orderId },
+        data: {
+          subscription_id: subscription.s_no,
+        },
+      });
+
+      this.logger.log(`Subscription activated for user ${payment.user_id} until ${endDate.toISOString()}`);
+      this.logger.log(`Successfully processed payment for order: ${paymentResponse.orderId}`);
+
+      return subscription;
+    } catch (error) {
+      this.logger.error(`Failed to process payment for order: ${paymentResponse.orderId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get active subscription for a user
+   */
+  async getActiveSubscription(userId: number) {
+    const subscription = await this.prisma.user_subscriptions.findFirst({
+      where: {
+        user_id: userId,
+        status: 'ACTIVE',
+        end_date: {
+          gte: new Date(),
+        },
+      },
+      include: {
+        subscription_plans: true,
+      },
+      orderBy: {
+        end_date: 'desc',
+      },
+    });
+
+    return subscription;
+  }
+
+  /**
+   * Check if user has active subscription
+   */
+  async hasActiveSubscription(userId: number): Promise<boolean> {
+    const subscription = await this.getActiveSubscription(userId);
+    return !!subscription;
+  }
+
+  /**
+   * Get payment status for mobile app (formatted response)
+   */
+  async getPaymentStatus(orderId: string) {
+    try {
+      const payment = await this.getPaymentByOrderId(orderId);
+
+      return {
+        success: true,
+        payment: {
+          orderId: payment.order_id,
+          amount: payment.amount,
+          currency: payment.currency,
+          status: payment.status,
+          trackingId: payment.tracking_id,
+          bankRefNo: payment.bank_ref_no,
+          paymentMode: payment.payment_mode,
+          statusMessage: payment.status_message,
+          createdAt: payment.created_at,
+          updatedAt: payment.updated_at,
+        },
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        return {
+          success: false,
+          message: 'Payment not found',
+        };
+      }
+      throw error;
+    }
+  }
+}

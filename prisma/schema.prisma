@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
@@ -600,6 +600,79 @@ model user_fcm_tokens {
   @@index([user_id], map: "fk_user_fcm_tokens_user")
 }
 
+model subscription_plans {
+  s_no                  Int                     @id @default(autoincrement())
+  name                  String                  @db.VarChar(100)
+  description           String?                 @db.Text
+  duration              Int
+  price                 Decimal                 @db.Decimal(10, 2)
+  currency              String                  @default("INR") @db.VarChar(10)
+  features              Json?
+  max_pg_locations      Int?
+  max_tenants           Int?
+  is_active             Boolean                 @default(true)
+  created_at            DateTime                @default(now()) @db.Timestamp(0)
+  updated_at            DateTime                @default(now()) @db.Timestamp(0)
+  subscription_payments subscription_payments[]
+  user_subscriptions    user_subscriptions[]
+
+  @@index([is_active], map: "idx_is_active")
+}
+
+model user_subscriptions {
+  s_no                  Int                     @id @default(autoincrement())
+  user_id               Int
+  organization_id       Int
+  plan_id               Int
+  status                subscription_status     @default(PENDING)
+  start_date            DateTime                @default(now()) @db.Timestamp(0)
+  end_date              DateTime                @default(dbgenerated("'0000-00-00 00:00:00'")) @db.Timestamp(0)
+  auto_renew            Boolean                 @default(false)
+  created_at            DateTime                @default(now()) @db.Timestamp(0)
+  updated_at            DateTime                @default(now()) @db.Timestamp(0)
+  subscription_payments subscription_payments[]
+  subscription_plans    subscription_plans      @relation(fields: [plan_id], references: [s_no], onUpdate: Restrict, map: "fk_user_subscription_plan")
+
+  @@index([plan_id], map: "fk_user_subscription_plan")
+  @@index([end_date], map: "idx_end_date")
+  @@index([organization_id], map: "idx_organization_id")
+  @@index([status], map: "idx_status")
+  @@index([user_id], map: "idx_user_id")
+}
+
+model subscription_payments {
+  s_no               Int                       @id @default(autoincrement())
+  order_id           String                    @unique(map: "order_id") @db.VarChar(255)
+  user_id            Int
+  organization_id    Int
+  subscription_id    Int?
+  plan_id            Int
+  amount             String                    @db.VarChar(50)
+  currency           String                    @default("INR") @db.VarChar(10)
+  payment_type       subscription_payment_type
+  status             payment_status            @default(INITIATED)
+  tracking_id        String?                   @db.VarChar(255)
+  bank_ref_no        String?                   @db.VarChar(255)
+  payment_mode       String?                   @db.VarChar(100)
+  status_code        String?                   @db.VarChar(50)
+  status_message     String?                   @db.Text
+  failure_message    String?                   @db.Text
+  response_data      Json?
+  metadata           Json?
+  created_at         DateTime                  @default(now()) @db.Timestamp(0)
+  updated_at         DateTime                  @default(now()) @db.Timestamp(0)
+  subscription_plans subscription_plans        @relation(fields: [plan_id], references: [s_no], onUpdate: Restrict, map: "fk_subscription_payment_plan")
+  user_subscriptions user_subscriptions?       @relation(fields: [subscription_id], references: [s_no], onUpdate: Restrict, map: "fk_subscription_payment_subscription")
+
+  @@index([order_id], map: "idx_order_id")
+  @@index([user_id], map: "idx_user_id")
+  @@index([organization_id], map: "idx_organization_id")
+  @@index([status], map: "idx_status")
+  @@index([created_at], map: "idx_created_at")
+  @@index([plan_id], map: "fk_subscription_payment_plan")
+  @@index([subscription_id], map: "fk_subscription_payment_subscription")
+}
+
 enum roles_status {
   ACTIVE
   INACTIVE
@@ -680,4 +753,25 @@ enum refund_payments_status {
   PENDING
   FAILED
   PARTIAL
+}
+
+enum subscription_status {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  PENDING
+}
+
+enum subscription_payment_type {
+  NEW_SUBSCRIPTION
+  RENEWAL
+  UPGRADE
+}
+
+enum payment_status {
+  INITIATED
+  SUCCESS
+  FAILURE
+  ABORTED
+  PENDING
 }
