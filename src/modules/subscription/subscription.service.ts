@@ -128,23 +128,51 @@ export class SubscriptionService {
   }
 
   /**
-   * Get all subscriptions for a user
+   * Get all subscriptions for a user with pagination
    */
-  async getUserSubscriptions(userId: number, organizationId: number) {
-    const subscriptions = await this.prisma.user_subscriptions.findMany({
-      where: {
-        user_id: userId,
-        organization_id: organizationId,
-      },
-      include: {
-        subscription_plans: true,
-      },
-      orderBy: {
-        created_at: 'desc',
-      },
-    });
+  async getUserSubscriptions(
+    userId: number, 
+    organizationId: number,
+    page: number = 1,
+    limit: number = 10,
+  ) {
+    const skip = (page - 1) * limit;
 
-    return subscriptions;
+    const [subscriptions, total] = await Promise.all([
+      this.prisma.user_subscriptions.findMany({
+        where: {
+          user_id: userId,
+          organization_id: organizationId,
+        },
+        include: {
+          subscription_plans: true,
+        },
+        orderBy: {
+          created_at: 'desc',
+        },
+        skip,
+        take: limit,
+      }),
+      this.prisma.user_subscriptions.count({
+        where: {
+          user_id: userId,
+          organization_id: organizationId,
+        },
+      }),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data: subscriptions,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasMore: page < totalPages,
+      },
+    };
   }
 
   /**
@@ -185,6 +213,7 @@ export class SubscriptionService {
         end_date: new Date(Date.now() + plan.duration * 24 * 60 * 60 * 1000),
         status: 'PENDING',
         auto_renew: false,
+        // Note: amount_paid field doesn't exist in schema, amount is stored in subscription_payments table
       },
     });
 
@@ -299,6 +328,64 @@ export class SubscriptionService {
       console.error('❌ Decryption error:', error);
       throw new Error('Payment decryption failed');
     }
+  }
+
+  /**
+   * Manually activate subscription (for debugging/testing)
+   */
+  async manuallyActivateSubscription(orderId: string, upiTransactionId?: string) {
+    console.log('🔧 Manual activation requested for order:', orderId);
+
+    // Find subscription by order ID pattern
+    // Order ID format: SUB_34_1_timestamp
+    const orderParts = orderId.split('_');
+    const userId = parseInt(orderParts[1]);
+    const planId = parseInt(orderParts[2]);
+
+    console.log('📋 Parsed order:', { userId, planId, orderId });
+
+    // Find the most recent PENDING subscription for this user and plan
+    const subscription = await this.prisma.user_subscriptions.findFirst({
+      where: {
+        user_id: userId,
+        plan_id: planId,
+        status: 'PENDING',
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+      include: {
+        subscription_plans: true,
+      },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException(
+        `No pending subscription found for order ${orderId}`,
+      );
+    }
+
+    console.log('✅ Found subscription:', subscription.s_no);
+
+    // Activate the subscription
+    const updatedSubscription = await this.prisma.user_subscriptions.update({
+      where: { s_no: subscription.s_no },
+      data: {
+        status: 'ACTIVE',
+      },
+      include: {
+        subscription_plans: true,
+      },
+    });
+
+    console.log('🎉 Subscription activated:', updatedSubscription.s_no);
+
+    return {
+      subscription: updatedSubscription,
+      orderId,
+      upiTransactionId,
+      message: 'Subscription activated successfully',
+    };
   }
 
   /**

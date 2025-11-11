@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Req, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Req, Body, UseGuards, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SubscriptionService } from './subscription.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -68,8 +68,9 @@ export class SubscriptionController {
         console.log('⚠️ Missing user info - userId:', userId, 'orgId:', organizationId);
         return {
           success: true,
-          isActive: false,
+          has_active_subscription: false,
           subscription: null,
+          days_remaining: 0,
         };
       }
 
@@ -80,16 +81,39 @@ export class SubscriptionController {
         organizationId,
       );
 
+      // Normalize the response: rename subscription_plans to plan
+      let normalizedSubscription = null;
+      if (result.subscription) {
+        const { subscription_plans, ...rest } = result.subscription as any;
+        normalizedSubscription = {
+          ...rest,
+          plan: subscription_plans || null,
+        };
+      }
+
+      // Calculate days remaining
+      let daysRemaining = 0;
+      if (result.subscription && result.subscription.end_date) {
+        const endDate = new Date(result.subscription.end_date);
+        const now = new Date();
+        const diffTime = endDate.getTime() - now.getTime();
+        daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+      }
+
       return {
         success: true,
-        ...result,
+        has_active_subscription: result.isActive,
+        subscription: normalizedSubscription,
+        days_remaining: daysRemaining,
+        is_trial: false, // Add trial logic if needed
       };
     } catch (error) {
       console.error('❌ Error checking subscription status:', error);
       return {
         success: true,
-        isActive: false,
+        has_active_subscription: false,
         subscription: null,
+        days_remaining: 0,
       };
     }
   }
@@ -100,18 +124,37 @@ export class SubscriptionController {
   @Get('history')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get user subscription history' })
-  async getHistory(@Req() req: any) {
+  async getHistory(
+    @Req() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
     const userId = parseInt(req.headers['x-user-id']);
     const organizationId = parseInt(req.headers['x-organization-id']);
 
-    const subscriptions = await this.subscriptionService.getUserSubscriptions(
+    const pageNum = page ? parseInt(page) : 1;
+    const limitNum = limit ? parseInt(limit) : 10;
+
+    const result = await this.subscriptionService.getUserSubscriptions(
       userId,
       organizationId,
+      pageNum,
+      limitNum,
     );
+
+    // Normalize subscriptions: rename subscription_plans to plan
+    const normalizedSubscriptions = result.data.map((sub: any) => {
+      const { subscription_plans, ...rest } = sub;
+      return {
+        ...rest,
+        plan: subscription_plans || null,
+      };
+    });
 
     return {
       success: true,
-      subscriptions,
+      subscriptions: normalizedSubscriptions,
+      pagination: result.pagination,
     };
   }
 
@@ -150,7 +193,31 @@ export class SubscriptionController {
   }
 
   /**
-   * Payment callback - Success
+   * Manual payment verification (for testing/debugging)
+   */
+  @Post('payment/verify-manual')
+  @ApiOperation({ summary: 'Manually verify and activate payment' })
+  async verifyManualPayment(@Body() body: { order_id: string; upi_transaction_id?: string }) {
+    try {
+      const result = await this.subscriptionService.manuallyActivateSubscription(
+        body.order_id,
+        body.upi_transaction_id,
+      );
+      return {
+        success: true,
+        message: 'Subscription activated successfully',
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  /**
+   * Payment callback - Success (POST)
    */
   @Post('payment/callback')
   @ApiOperation({ summary: 'CCAvenue payment callback' })
@@ -209,6 +276,16 @@ export class SubscriptionController {
         </html>
       `;
     }
+  }
+
+  /**
+   * Payment callback - Success (GET - for CCAvenue redirect)
+   */
+  @Get('payment/callback')
+  @ApiOperation({ summary: 'CCAvenue payment callback (GET)' })
+  async paymentCallbackGet(@Query() query: any) {
+    console.log('💳 Payment callback GET received:', query);
+    return this.paymentCallback({ encResp: query.encResp }, null);
   }
 
   /**

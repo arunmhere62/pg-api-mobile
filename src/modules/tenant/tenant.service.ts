@@ -1,21 +1,25 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { PendingRentCalculatorService } from '../common/pending-rent-calculator.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { PendingPaymentService } from './pending-payment.service';
+import { TenantStatusService } from './tenant-status.service';
 
 @Injectable()
 export class TenantService {
   constructor(
     private prisma: PrismaService,
     private pendingPaymentService: PendingPaymentService,
+    private tenantStatusService: TenantStatusService,
+    private pendingRentCalculatorService: PendingRentCalculatorService,
   ) {}
 
   /**
    * Create a new tenant
    */
   async create(createTenantDto: CreateTenantDto) {
-    try {
+    try {   
       // Generate unique tenant_id
       const tenantId = await this.generateTenantId();
 
@@ -142,8 +146,9 @@ export class TenantService {
     search?: string;
     pending_rent?: boolean;
     pending_advance?: boolean;
+    partial_rent?: boolean;
   }) {
-    const { page = 1, limit = 10, pg_id, room_id, status, search, pending_rent, pending_advance } = params;
+    const { page = 1, limit = 10, pg_id, room_id, status, search, pending_rent, pending_advance, partial_rent } = params;
     const skip = (page - 1) * limit;
 
     // Build where clause
@@ -272,68 +277,29 @@ export class TenantService {
       },
     });
 
-    // Calculate pending payments and check for unpaid months for each tenant
-    const tenantsWithPendingPayments = await Promise.all(
-      tenants.map(async (tenant) => {
-        try {
-          const pendingPayment = await this.pendingPaymentService.calculateTenantPendingPayment(
-            tenant.s_no,
-          );
-          
-          // Check if check-in date is covered by any payment period
-          let hasUnpaidMonths = false;
-          if (tenant.check_in_date && tenant.tenant_payments) {
-            const checkInDate = new Date(tenant.check_in_date);
-            checkInDate.setHours(0, 0, 0, 0);
-            
-            const checkInCovered = tenant.tenant_payments.some((payment) => {
-              const startDate = new Date(payment.start_date);
-              const endDate = new Date(payment.end_date);
-              startDate.setHours(0, 0, 0, 0);
-              endDate.setHours(0, 0, 0, 0);
-              return checkInDate >= startDate && checkInDate <= endDate;
-            });
-            
-            hasUnpaidMonths = !checkInCovered;
-          } else if (tenant.check_in_date && (!tenant.tenant_payments || tenant.tenant_payments.length === 0)) {
-            // No payments at all
-            hasUnpaidMonths = true;
-          }
-          
-          return {
-            ...tenant,
-            pending_payment: pendingPayment,
-            has_unpaid_months: hasUnpaidMonths,
-          };
-        } catch (error) {
-          // If pending payment calculation fails, return tenant without it
-          return {
-            ...tenant,
-            pending_payment: null,
-          };
-        }
-      }),
-    );
+    // Enrich tenants with status calculations using TenantStatusService
+    const enrichedTenants = this.tenantStatusService.enrichTenantsWithStatus(tenants);
 
-    // Filter by pending rent if requested
-    let filteredTenants = tenantsWithPendingPayments;
+    // Filter by pending rent if requested - use TenantStatusService
+    let filteredTenants = enrichedTenants;
     
     if (pending_rent) {
-      filteredTenants = filteredTenants.filter(
-        (tenant) => tenant.pending_payment && tenant.pending_payment.total_pending > 0
-      );
+      filteredTenants = this.tenantStatusService.getTenantsWithPendingRent(filteredTenants);
     }
 
-    // Filter by pending advance if requested (tenants without advance payments)
+    // Filter by pending advance if requested - use TenantStatusService
     if (pending_advance) {
-      filteredTenants = filteredTenants.filter(
-        (tenant) => !tenant.advance_payments || tenant.advance_payments.length === 0
-      );
+      filteredTenants = this.tenantStatusService.getTenantsWithoutAdvance(filteredTenants);
+    }
+
+    // Filter by partial rent if requested - use TenantStatusService
+    if (partial_rent) {
+      filteredTenants = this.tenantStatusService.getTenantsWithPartialRent(filteredTenants);
     }
 
     // Recalculate pagination based on filtered results
     const filteredTotal = filteredTenants.length;
-    const paginatedFilteredTenants = pending_rent || pending_advance 
+    const paginatedFilteredTenants = pending_rent || pending_advance || partial_rent
       ? filteredTenants 
       : filteredTenants;
 
@@ -343,9 +309,177 @@ export class TenantService {
       pagination: {
         page,
         limit,
-        total: pending_rent || pending_advance ? filteredTotal : total,
-        totalPages: Math.ceil((pending_rent || pending_advance ? filteredTotal : total) / limit),
-        hasMore: skip + limit < (pending_rent || pending_advance ? filteredTotal : total),
+        total: pending_rent || pending_advance || partial_rent ? filteredTotal : total,
+        totalPages: Math.ceil((pending_rent || pending_advance || partial_rent ? filteredTotal : total) / limit),
+        hasMore: skip + limit < (pending_rent || pending_advance || partial_rent ? filteredTotal : total),
+      },
+    };
+  }
+
+  /**
+   * Get tenants with pending rent
+   */
+  async getTenantsWithPendingRent(params: {
+    page?: number;
+    limit?: number;
+    pg_id?: number;
+  }) {
+    const { page = 1, limit = 10, pg_id } = params;
+    const skip = (page - 1) * limit;
+
+    // Get all tenants first
+    const tenants = await this.prisma.tenants.findMany({
+      where: {
+        pg_id,
+        status: 'ACTIVE',
+      },
+      include: {
+        pg_locations: true,
+        rooms: true,
+        beds: true,
+        city: true,
+        state: true,
+        tenant_payments: {
+          orderBy: { payment_date: 'desc' },
+        },
+        advance_payments: {
+          orderBy: { payment_date: 'desc' },
+        },
+        refund_payments: {
+          orderBy: { payment_date: 'desc' },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    // Filter tenants with pending rent using TenantStatusService
+    const filteredTenants = this.tenantStatusService.getTenantsWithPendingRent(tenants);
+    
+    // Apply pagination to filtered results
+    const paginatedTenants = filteredTenants.slice(skip, skip + limit);
+    const total = filteredTenants.length;
+
+    return {
+      success: true,
+      data: paginatedTenants,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: skip + limit < total,
+      },
+    };
+  }
+
+  /**
+   * Get tenants with partial rent
+   */
+  async getTenantsWithPartialRent(params: {
+    page?: number;
+    limit?: number;
+    pg_id?: number;
+  }) {
+    const { page = 1, limit = 10, pg_id } = params;
+    const skip = (page - 1) * limit;
+
+    // Get all tenants first
+    const tenants = await this.prisma.tenants.findMany({
+      where: {
+        pg_id,
+        status: 'ACTIVE',
+      },
+      include: {
+        pg_locations: true,
+        rooms: true,
+        beds: true,
+        city: true,
+        state: true,
+        tenant_payments: {
+          orderBy: { payment_date: 'desc' },
+        },
+        advance_payments: {
+          orderBy: { payment_date: 'desc' },
+        },
+        refund_payments: {
+          orderBy: { payment_date: 'desc' },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    // Filter tenants with partial rent using TenantStatusService
+    const filteredTenants = this.tenantStatusService.getTenantsWithPartialRent(tenants);
+    
+    // Apply pagination to filtered results
+    const paginatedTenants = filteredTenants.slice(skip, skip + limit);
+    const total = filteredTenants.length;
+
+    return {
+      success: true,
+      data: paginatedTenants,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: skip + limit < total,
+      },
+    };
+  }
+
+  /**
+   * Get tenants without advance payment
+   */
+  async getTenantsWithoutAdvance(params: {
+    page?: number;
+    limit?: number;
+    pg_id?: number;
+  }) {
+    const { page = 1, limit = 10, pg_id } = params;
+    const skip = (page - 1) * limit;
+
+    // Get all tenants first
+    const tenants = await this.prisma.tenants.findMany({
+      where: {
+        pg_id,
+        status: 'ACTIVE',
+      },
+      include: {
+        pg_locations: true,
+        rooms: true,
+        beds: true,
+        city: true,
+        state: true,
+        tenant_payments: {
+          orderBy: { payment_date: 'desc' },
+        },
+        advance_payments: {
+          orderBy: { payment_date: 'desc' },
+        },
+        refund_payments: {
+          orderBy: { payment_date: 'desc' },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    // Filter tenants without advance using TenantStatusService
+    const filteredTenants = this.tenantStatusService.getTenantsWithoutAdvance(tenants);
+    
+    // Apply pagination to filtered results
+    const paginatedTenants = filteredTenants.slice(skip, skip + limit);
+    const total = filteredTenants.length;
+
+    return {
+      success: true,
+      data: paginatedTenants,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: skip + limit < total,
       },
     };
   }
@@ -454,21 +588,12 @@ export class TenantService {
       throw new NotFoundException(`Tenant with ID ${id} not found`);
     }
 
-    // Calculate pending payment
-    let pendingPayment = null;
-    try {
-      pendingPayment = await this.pendingPaymentService.calculateTenantPendingPayment(id);
-    } catch (error) {
-      // If pending payment calculation fails, continue without it
-      console.error('Failed to calculate pending payment:', error);
-    }
+    // Enrich tenant with status calculations using TenantStatusService
+    const enrichedTenant = this.tenantStatusService.enrichTenantsWithStatus([tenant])[0];
 
     return {
       success: true,
-      data: {
-        ...tenant,
-        pending_payment: pendingPayment,
-      },
+      data: enrichedTenant,
     };
   }
 
@@ -597,5 +722,292 @@ export class TenantService {
     const timestamp = Date.now().toString().slice(-6);
     const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     return `${prefix}${timestamp}${random}`;
+  }
+
+  /**
+   * Get detailed pending rent information for a tenant
+   */
+  async getTenantPendingRentDetails(tenantId: number) {
+    try {
+      // Get tenant with all payment data
+      const tenant = await this.prisma.tenants.findUnique({
+        where: { s_no: tenantId },
+        include: {
+          rooms: true,
+          beds: true,
+          tenant_payments: {
+            orderBy: { payment_date: 'desc' }
+          },
+          advance_payments: {
+            orderBy: { payment_date: 'desc' }
+          },
+          refund_payments: {
+            orderBy: { payment_date: 'desc' }
+          },
+        },
+      });
+
+      if (!tenant) {
+        return {
+          success: false,
+          message: 'Tenant not found',
+        };
+      }
+
+      // Transform tenant_payments to match TenantPayment interface
+      const transformedTenantPayments = (tenant.tenant_payments || []).map(payment => ({
+        ...payment,
+        payment_date: payment.payment_date.toISOString(),
+        amount_paid: payment.amount_paid.toString(),
+        actual_rent_amount: payment.actual_rent_amount.toString(),
+        start_date: payment.start_date.toISOString(),
+        end_date: payment.end_date.toISOString()
+      }));
+
+      // Transform advance_payments to match AdvancePayment interface
+      const transformedAdvancePayments = (tenant.advance_payments || []).map(payment => ({
+        ...payment,
+        payment_date: payment.payment_date.toISOString(),
+        amount_paid: payment.amount_paid.toString(),
+        actual_rent_amount: payment.actual_rent_amount.toString()
+      }));
+
+      // Calculate detailed pending rent information
+      const pendingRentDetails = this.pendingRentCalculatorService.calculatePendingRentDetails(
+        tenant.check_in_date.toISOString(),
+        Number(tenant.rooms?.rent_price || 0),
+        transformedTenantPayments,
+        transformedAdvancePayments
+      );
+
+      return {
+        success: true,
+        data: {
+          tenant: {
+            id: tenant.s_no,
+            name: tenant.name,
+            tenant_id: tenant.tenant_id,
+            room: tenant.rooms?.room_no,
+            bed: tenant.beds?.bed_no,
+            check_in_date: tenant.check_in_date,
+            current_rent: tenant.rooms?.rent_price,
+          },
+          pending_rent_details: pendingRentDetails,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to calculate pending rent details',
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Get pending rent summary for all tenants with detailed breakdown
+   */
+  async getAllTenantsPendingRentSummary(params: any) {
+    try {
+      // Get all tenants with payment data
+      const tenants = await this.prisma.tenants.findMany({
+        where: {
+          pg_id: params.pg_id,
+          is_deleted: false,
+        },
+        include: {
+          rooms: true,
+          beds: true,
+          tenant_payments: {
+            orderBy: { payment_date: 'desc' }
+          },
+          advance_payments: {
+            orderBy: { payment_date: 'desc' }
+          },
+          refund_payments: {
+            orderBy: { payment_date: 'desc' }
+          },
+        },
+        take: params.limit || 50,
+        skip: ((params.page || 1) - 1) * (params.limit || 50),
+      });
+
+      // Calculate pending rent details for all tenants
+      const tenantsWithPendingRent = this.pendingRentCalculatorService.getBulkPendingRentSummary(tenants);
+
+      // Sort by total pending amount (highest first)
+      const sortedTenants = tenantsWithPendingRent.sort(
+        (a, b) => b.total_pending_amount - a.total_pending_amount
+      );
+
+      // Calculate summary statistics
+      const summary = {
+        total_tenants: sortedTenants.length,
+        tenants_with_pending: sortedTenants.filter(t => t.total_pending_amount > 0).length,
+        tenants_overdue: sortedTenants.filter(t => t.is_overdue).length,
+        total_pending_amount: sortedTenants.reduce((sum, t) => sum + t.total_pending_amount, 0),
+        tenants_need_follow_up: sortedTenants.filter(t => 
+          t.recommended_action === 'FOLLOW_UP' || t.recommended_action === 'URGENT_FOLLOW_UP'
+        ).length,
+        tenants_need_notice: sortedTenants.filter(t => 
+          t.recommended_action === 'NOTICE' || t.recommended_action === 'EVICTION_WARNING'
+        ).length,
+      };
+
+      return {
+        success: true,
+        data: sortedTenants,
+        summary,
+        pagination: {
+          page: params.page || 1,
+          limit: params.limit || 50,
+          total: sortedTenants.length,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to get pending rent summary',
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Get tenants with overdue payments
+   */
+  async getOverdueTenants(params: any) {
+    try {
+      // Get all tenants
+      const tenants = await this.prisma.tenants.findMany({
+        where: {
+          pg_id: params.pg_id,
+          is_deleted: false,
+        },
+        include: {
+          rooms: true,
+          beds: true,
+          tenant_payments: {
+            orderBy: { payment_date: 'desc' }
+          },
+          advance_payments: {
+            orderBy: { payment_date: 'desc' }
+          },
+        },
+      });
+
+      // Filter tenants with overdue payments
+      const overdueTenants = this.pendingRentCalculatorService.filterTenantsByPendingRent(
+        tenants,
+        {
+          minPendingAmount: params.min_amount ? parseInt(params.min_amount) : 0,
+          includeOverdue: true,
+        }
+      );
+
+      return {
+        success: true,
+        data: overdueTenants,
+        count: overdueTenants.length,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to get overdue tenants',
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Get pending rent statistics for dashboard
+   */
+  async getPendingRentStats(params: any) {
+    try {
+      // Get all tenants
+      const tenants = await this.prisma.tenants.findMany({
+        where: {
+          pg_id: params.pg_id,
+          is_deleted: false,
+        },
+        include: {
+          rooms: true,
+          beds: true,
+          tenant_payments: {
+            orderBy: { payment_date: 'desc' }
+          },
+          advance_payments: {
+            orderBy: { payment_date: 'desc' }
+          },
+        },
+      });
+
+      const tenantsWithPendingRent = this.pendingRentCalculatorService.getBulkPendingRentSummary(tenants);
+
+      // Calculate comprehensive statistics
+      const stats = {
+        total_tenants: tenantsWithPendingRent.length,
+        tenants_with_pending: tenantsWithPendingRent.filter(t => t.total_pending_amount > 0).length,
+        tenants_overdue: tenantsWithPendingRent.filter(t => t.is_overdue).length,
+        tenants_partial: tenantsWithPendingRent.filter(t => t.pending_rent_details.hasPartialPayments).length,
+        
+        total_pending_amount: tenantsWithPendingRent.reduce((sum, t) => sum + t.total_pending_amount, 0),
+        total_overdue_amount: tenantsWithPendingRent.reduce((sum, t) => 
+          sum + (t.is_overdue ? t.total_pending_amount : 0), 0
+        ),
+        
+        average_pending_per_tenant: tenantsWithPendingRent.length > 0 
+          ? tenantsWithPendingRent.reduce((sum, t) => sum + t.total_pending_amount, 0) / tenantsWithPendingRent.length
+          : 0,
+        
+        // Action recommendations
+        tenants_need_follow_up: tenantsWithPendingRent.filter(t => 
+          t.recommended_action === 'FOLLOW_UP' || t.recommended_action === 'URGENT_FOLLOW_UP'
+        ).length,
+        tenants_need_notice: tenantsWithPendingRent.filter(t => 
+          t.recommended_action === 'NOTICE' || t.recommended_action === 'EVICTION_WARNING'
+        ).length,
+        
+        // Monthly breakdown
+        pending_by_months: this.calculatePendingByMonths(tenantsWithPendingRent),
+      };
+
+      return {
+        success: true,
+        data: stats,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to get pending rent statistics',
+        error: error.message,
+      };
+    }
+  }
+
+  private calculatePendingByMonths(tenants: any[]) {
+    const monthlyStats = {};
+    
+    tenants.forEach(tenant => {
+      tenant.pending_rent_details.pendingMonths.forEach(month => {
+        if (!monthlyStats[month.month]) {
+          monthlyStats[month.month] = {
+            month: month.month,
+            monthName: month.monthName,
+            tenants_count: 0,
+            total_pending: 0,
+            overdue_count: 0,
+          };
+        }
+        
+        monthlyStats[month.month].tenants_count += 1;
+        monthlyStats[month.month].total_pending += month.pendingAmount;
+        if (month.isOverdue) {
+          monthlyStats[month.month].overdue_count += 1;
+        }
+      });
+    });
+    
+    return Object.values(monthlyStats).sort((a: any, b: any) => a.month.localeCompare(b.month));
   }
 }
