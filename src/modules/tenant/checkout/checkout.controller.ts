@@ -29,7 +29,7 @@ export class CheckoutController {
   @RequireHeaders({ pg_id: true, organization_id: true, user_id: true })
   @ApiOperation({ 
     summary: 'Checkout tenant',
-    description: 'Mark tenant as checked out with optional checkout date. Defaults to current date if not provided.'
+    description: 'Mark tenant as checked out. Checkout date is required and must be provided from frontend.'
   })
   @ApiParam({ 
     name: 'id', 
@@ -38,15 +38,11 @@ export class CheckoutController {
   })
   @ApiBody({ 
     type: CheckoutTenantDto,
-    description: 'Optional checkout date',
+    description: 'Checkout date is required',
     examples: {
       withDate: {
-        summary: 'With specific date',
+        summary: 'With checkout date (required)',
         value: { check_out_date: '2025-10-25' }
-      },
-      withoutDate: {
-        summary: 'Use current date',
-        value: {}
       }
     }
   })
@@ -63,6 +59,28 @@ export class CheckoutController {
           status: 'INACTIVE',
           check_out_date: '2025-10-25T00:00:00.000Z'
         }
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Missing required checkout date',
+    schema: {
+      example: {
+        statusCode: 400,
+        message: 'Checkout date is required. Please provide a valid checkout date.',
+        error: 'Bad Request'
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Cannot checkout tenant - has PARTIAL or unpaid payments',
+    schema: {
+      example: {
+        statusCode: 400,
+        message: 'Cannot checkout tenant. Tenant has 1 payment(s) in PARTIAL status: 1 rent payment(s) with PARTIAL status. Please complete or mark all PARTIAL payments as PAID before checkout.',
+        error: 'Bad Request'
       }
     }
   })

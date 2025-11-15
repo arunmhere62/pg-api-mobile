@@ -57,15 +57,50 @@ export class CheckoutService {
       throw new NotFoundException(`Tenant with ID ${id} not found`);
     }
 
-    // Check if all payments are paid
+    // Check for PARTIAL status payments first (strict validation)
+    const partialRentPayments = tenant.tenant_payments.filter(
+      (payment) => payment.status === 'PARTIAL'
+    );
+    const partialAdvancePayments = tenant.advance_payments.filter(
+      (payment) => payment.status === 'PARTIAL'
+    );
+    const partialRefundPayments = tenant.refund_payments.filter(
+      (payment) => payment.status === 'PARTIAL'
+    );
+
+    const totalPartialPayments = 
+      partialRentPayments.length + 
+      partialAdvancePayments.length + 
+      partialRefundPayments.length;
+
+    // Reject checkout if there are any PARTIAL payments
+    if (totalPartialPayments > 0) {
+      const partialDetails = [];
+      
+      if (partialRentPayments.length > 0) {
+        partialDetails.push(`${partialRentPayments.length} rent payment(s) with PARTIAL status`);
+      }
+      if (partialAdvancePayments.length > 0) {
+        partialDetails.push(`${partialAdvancePayments.length} advance payment(s) with PARTIAL status`);
+      }
+      if (partialRefundPayments.length > 0) {
+        partialDetails.push(`${partialRefundPayments.length} refund payment(s) with PARTIAL status`);
+      }
+
+      throw new BadRequestException(
+        `Cannot checkout tenant. Tenant has ${totalPartialPayments} payment(s) in PARTIAL status: ${partialDetails.join(', ')}. Please complete or mark all PARTIAL payments as PAID before checkout.`
+      );
+    }
+
+    // Check if all remaining payments are paid (excluding PARTIAL which we already checked)
     const unpaidRentPayments = tenant.tenant_payments.filter(
-      (payment) => payment.status !== 'PAID'
+      (payment) => payment.status !== 'PAID' && payment.status !== 'PARTIAL'
     );
     const unpaidAdvancePayments = tenant.advance_payments.filter(
-      (payment) => payment.status !== 'PAID'
+      (payment) => payment.status !== 'PAID' && payment.status !== 'PARTIAL'
     );
     const unpaidRefundPayments = tenant.refund_payments.filter(
-      (payment) => payment.status !== 'PAID'
+      (payment) => payment.status !== 'PAID' && payment.status !== 'PARTIAL'
     );
 
     const totalUnpaidPayments = 
@@ -91,10 +126,12 @@ export class CheckoutService {
       );
     }
 
-    // Use provided checkout date or default to now
-    const checkoutDate = checkoutDto.check_out_date 
-      ? new Date(checkoutDto.check_out_date) 
-      : new Date();
+    // Checkout date is required - must be provided from frontend
+    if (!checkoutDto.check_out_date) {
+      throw new BadRequestException('Checkout date is required. Please provide a valid checkout date.');
+    }
+
+    const checkoutDate = new Date(checkoutDto.check_out_date);
 
     // Update tenant status
     const updatedTenant = await this.prisma.tenants.update({
@@ -126,6 +163,20 @@ export class CheckoutService {
         s_no: id,
         is_deleted: false,
       },
+      include: {
+        tenant_payments: {
+          where: { is_deleted: false },
+          select: { status: true },
+        },
+        advance_payments: {
+          where: { is_deleted: false },
+          select: { status: true },
+        },
+        refund_payments: {
+          where: { is_deleted: false },
+          select: { status: true },
+        },
+      },
     });
 
     if (!tenant) {
@@ -135,13 +186,39 @@ export class CheckoutService {
     let updateData: any = {};
 
     if (updateCheckoutDateDto.clear_checkout) {
-      // Clear checkout date and reactivate tenant
+      // Clear checkout date and reactivate tenant (no validation needed for clearing)
       updateData = {
         check_out_date: null,
         status: 'ACTIVE',
       };
     } else if (updateCheckoutDateDto.check_out_date) {
-      // Update checkout date
+      // Validate before updating checkout date (only if setting a new checkout date)
+      // Check for PARTIAL payments
+      const partialPayments = [
+        ...tenant.tenant_payments.filter(p => p.status === 'PARTIAL'),
+        ...tenant.advance_payments.filter(p => p.status === 'PARTIAL'),
+        ...tenant.refund_payments.filter(p => p.status === 'PARTIAL'),
+      ];
+
+      if (partialPayments.length > 0) {
+        throw new BadRequestException(
+          `Cannot update checkout date. Tenant has ${partialPayments.length} payment(s) in PARTIAL status. Please complete or mark all PARTIAL payments as PAID before checkout.`
+        );
+      }
+
+      // Check for other unpaid payments
+      const unpaidPayments = [
+        ...tenant.tenant_payments.filter(p => p.status !== 'PAID' && p.status !== 'PARTIAL'),
+        ...tenant.advance_payments.filter(p => p.status !== 'PAID' && p.status !== 'PARTIAL'),
+        ...tenant.refund_payments.filter(p => p.status !== 'PAID' && p.status !== 'PARTIAL'),
+      ];
+
+      if (unpaidPayments.length > 0) {
+        throw new BadRequestException(
+          `Cannot update checkout date. There are ${unpaidPayments.length} unpaid payment(s). Please mark all payments as PAID before checkout.`
+        );
+      }
+
       updateData = {
         check_out_date: new Date(updateCheckoutDateDto.check_out_date),
       };
