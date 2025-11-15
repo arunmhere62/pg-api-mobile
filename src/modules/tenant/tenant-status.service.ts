@@ -60,8 +60,15 @@ export class TenantStatusService {
       // If tenant checked in before today, always mark as pending
       if (checkInDate < now) {
         // Calculate months between check-in and now
-        const yearDiff = now.getFullYear() - checkInDate.getFullYear();
-        const monthDiff = now.getMonth() - checkInDate.getMonth();
+        let yearDiff = now.getFullYear() - checkInDate.getFullYear();
+        let monthDiff = now.getMonth() - checkInDate.getMonth();
+        
+        // Adjust for day of month - if current day is on or after check-in day, add 1 month
+        // (meaning the full month has passed)
+        if (now.getDate() >= checkInDate.getDate()) {
+          monthDiff++;
+        }
+        
         return Math.max(1, yearDiff * 12 + monthDiff);
       }
       return 0;
@@ -113,8 +120,14 @@ export class TenantStatusService {
           lastPaidEndDate.setHours(0, 0, 0, 0);
 
           // Calculate months between last paid end date and now
-          const yearDiff = now.getFullYear() - lastPaidEndDate.getFullYear();
-          const monthDiff = now.getMonth() - lastPaidEndDate.getMonth();
+          let yearDiff = now.getFullYear() - lastPaidEndDate.getFullYear();
+          let monthDiff = now.getMonth() - lastPaidEndDate.getMonth();
+          
+          // Adjust for day of month - if current day is after last paid end day, add 1 month
+          if (now.getDate() > lastPaidEndDate.getDate()) {
+            monthDiff++;
+          }
+          
           pendingCount = Math.max(1, yearDiff * 12 + monthDiff);
         } else {
           // No PAID payments at all, calculate from check-in date
@@ -122,8 +135,15 @@ export class TenantStatusService {
             const checkInDate = new Date(tenant.check_in_date);
             checkInDate.setHours(0, 0, 0, 0);
 
-            const yearDiff = now.getFullYear() - checkInDate.getFullYear();
-            const monthDiff = now.getMonth() - checkInDate.getMonth();
+            let yearDiff = now.getFullYear() - checkInDate.getFullYear();
+            let monthDiff = now.getMonth() - checkInDate.getMonth();
+            
+            // Adjust for day of month - if current day is on or after check-in day, add 1 month
+            // (meaning the full month has passed)
+            if (now.getDate() >= checkInDate.getDate()) {
+              monthDiff++;
+            }
+            
             pendingCount = Math.max(1, yearDiff * 12 + monthDiff);
           } else {
             pendingCount = 1;

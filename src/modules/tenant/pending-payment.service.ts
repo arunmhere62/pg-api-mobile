@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TenantStatusService } from './tenant-status.service';
 
 export interface PendingPaymentDetails {
   tenant_id: number;
@@ -25,7 +26,10 @@ export interface PendingPaymentDetails {
 
 @Injectable()
 export class PendingPaymentService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private tenantStatusService: TenantStatusService,
+  ) {}
 
   /**
    * Calculate pending payments for a specific tenant
@@ -233,7 +237,7 @@ export class PendingPaymentService {
 
   /**
    * Get all tenants with pending payments
-   * Uses the same simplified logic as calculateTenantPendingPayment
+   * Uses the same logic as tenant findAll method with TenantStatusService
    */
   async getAllPendingPayments(pgId?: number): Promise<PendingPaymentDetails[]> {
     const where: any = {
@@ -245,21 +249,100 @@ export class PendingPaymentService {
       where.pg_id = pgId;
     }
 
+    // Get tenants with all payment data (same as tenant findAll method)
     const tenants = await this.prisma.tenants.findMany({
       where,
-      select: {
-        s_no: true,
+      include: {
+        pg_locations: {
+          select: {
+            s_no: true,
+            location_name: true,
+            address: true,
+          },
+        },
+        rooms: {
+          select: {
+            s_no: true,
+            room_no: true,
+            rent_price: true,
+          },
+        },
+        beds: {
+          select: {
+            s_no: true,
+            bed_no: true,
+          },
+        },
+        tenant_payments: {
+          where: {
+            is_deleted: false,
+          },
+          orderBy: {
+            payment_date: 'desc',
+          },
+          select: {
+            s_no: true,
+            payment_date: true,
+            amount_paid: true,
+            actual_rent_amount: true,
+            start_date: true,
+            end_date: true,
+            payment_method: true,
+            status: true,
+            remarks: true,
+          },
+        },
+        advance_payments: {
+          where: {
+            is_deleted: false,
+          },
+          orderBy: {
+            payment_date: 'desc',
+          },
+          select: {
+            s_no: true,
+            payment_date: true,
+            amount_paid: true,
+            actual_rent_amount: true,
+            payment_method: true,
+            status: true,
+            remarks: true,
+          },
+        },
+        refund_payments: {
+          where: {
+            is_deleted: false,
+          },
+          orderBy: {
+            payment_date: 'desc',
+          },
+          select: {
+            s_no: true,
+            amount_paid: true,
+            payment_method: true,
+            payment_date: true,
+            status: true,
+            remarks: true,
+            actual_rent_amount: true,
+          },
+        },
+      },
+      orderBy: {
+        created_at: 'desc',
       },
     });
 
+    // Use the same filtering logic as tenant findAll method
+    const tenantsWithPendingRent = this.tenantStatusService.getTenantsWithPendingRent(tenants);
+
+    // Convert filtered tenants to PendingPaymentDetails format
     const pendingPayments = await Promise.all(
-      tenants.map((tenant) =>
+      tenantsWithPendingRent.map((tenant) =>
         this.calculateTenantPendingPayment(tenant.s_no),
       ),
     );
 
-    // Filter only tenants with pending payments
-    return pendingPayments.filter((p) => p.total_pending > 0);
+    return pendingPayments;
   }
 
   /**
