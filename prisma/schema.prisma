@@ -231,7 +231,6 @@ model country {
 model current_bills {
   s_no            Int               @id @default(autoincrement())
   tenant_id       Int
-  tenant_rent_id  Int
   pg_id           Int
   bill_amount     Decimal           @db.Decimal(10, 2)
   bill_date       DateTime          @default(now()) @db.Timestamp(0)

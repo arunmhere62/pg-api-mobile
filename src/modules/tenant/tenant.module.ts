@@ -11,9 +11,10 @@ import { CheckoutModule } from './checkout/checkout.module';
 import { TenantPaymentModule } from './tenant-payment/tenant-payment.module';
 import { AdvancePaymentModule } from './advance-payment/advance-payment.module';
 import { RefundPaymentModule } from './refund-payment/refund-payment.module';
+import { CurrentBillModule } from './current-bill/current-bill.module';
 
 @Module({
-  imports: [PrismaModule, CommonModule, CheckoutModule, TenantPaymentModule, AdvancePaymentModule, RefundPaymentModule],
+  imports: [PrismaModule, CommonModule, CheckoutModule, TenantPaymentModule, AdvancePaymentModule, RefundPaymentModule, CurrentBillModule],
   controllers: [TenantController, PendingPaymentController, TenantStatusController],
   providers: [TenantService, PendingPaymentService, TenantStatusService],
   exports: [TenantService, PendingPaymentService, TenantStatusService],

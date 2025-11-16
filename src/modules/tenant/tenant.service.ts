@@ -581,6 +581,21 @@ export class TenantService {
             actual_rent_amount: true,
           },
         },
+        current_bills: {
+          where: {
+            is_deleted: false,
+          },
+          orderBy: {
+            bill_date: 'desc',
+          },
+          select: {
+            s_no: true,
+            bill_amount: true,
+            bill_date: true,
+            created_at: true,
+            updated_at: true,
+          },
+        },
       },
     });
 
