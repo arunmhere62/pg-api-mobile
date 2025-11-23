@@ -6,6 +6,7 @@
   "private": true,
   "license": "MIT",
   "scripts": {
+    "dev": "nest start --watch",
     "build": "prisma generate && nest build",
     "build:render": "npm install --legacy-peer-deps && prisma generate && nest build",
     "build:windows": "npm install --legacy-peer-deps --no-audit && prisma generate && npm run build",

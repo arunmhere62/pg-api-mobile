@@ -66,16 +66,6 @@ export class OrganizationService {
             },
           },
         },
-        // Get roles for this organization
-        roles: {
-          where: {
-            is_deleted: false,
-          },
-          select: {
-            s_no: true,
-            role_name: true,
-          },
-        },
       },
       orderBy: {
         created_at: 'desc',
@@ -85,9 +75,6 @@ export class OrganizationService {
     // Transform data to include counts and admin info
     const transformedOrganizations = await Promise.all(
       organizations.map(async (org) => {
-        // Find ADMIN role for this organization
-        const adminRole = org.roles.find(role => role.role_name === 'ADMIN');
-        
         // Get admin users directly from users table
         // Query: organization_id -> users table -> filter by role_name = 'ADMIN'
         const adminUsers = await this.prisma.user.findMany({
@@ -265,29 +252,6 @@ export class OrganizationService {
             created_at: true,
           },
         },
-        // Get roles to find users
-        roles: {
-          where: {
-            is_deleted: false,
-          },
-          select: {
-            s_no: true,
-            role_name: true,
-            users: {
-              where: {
-                is_deleted: false,
-              },
-              select: {
-                s_no: true,
-                name: true,
-                email: true,
-                phone: true,
-                status: true,
-                created_at: true,
-              },
-            },
-          },
-        },
       },
     });
 
@@ -321,18 +285,36 @@ export class OrganizationService {
 
     const totalRevenue = revenueResult._sum.amount_paid || 0;
 
-    // Get all users from roles
-    const allUsers = organization.roles.flatMap(role => 
-      role.users.map(user => ({
-        s_no: user.s_no,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        status: user.status,
-        role: role.role_name,
-        created_at: user.created_at,
-      }))
-    );
+    // Get all users for this organization
+    const allUsers = await this.prisma.user.findMany({
+      where: {
+        organization_id: id,
+        is_deleted: false,
+      },
+      select: {
+        s_no: true,
+        name: true,
+        email: true,
+        phone: true,
+        status: true,
+        created_at: true,
+        roles: {
+          select: {
+            role_name: true,
+          },
+        },
+      },
+    });
+
+    const transformedUsers = allUsers.map(user => ({
+      s_no: user.s_no,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      status: user.status,
+      role: user.roles.role_name,
+      created_at: user.created_at,
+    }));
 
     return {
       success: true,
@@ -342,10 +324,10 @@ export class OrganizationService {
         description: organization.description,
         created_at: organization.created_at,
         updated_at: organization.updated_at,
-        users: allUsers,
+        users: transformedUsers,
         pg_locations: organization.pg_locations,
         statistics: {
-          totalUsers: allUsers.length,
+          totalUsers: transformedUsers.length,
           totalPGLocations: organization.pg_locations.length,
           totalTenants: tenantCount,
           totalRevenue: Number(totalRevenue),

@@ -16,6 +16,9 @@ import { TicketModule } from './modules/ticket/ticket.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { PaymentGatewayModule } from './modules/payment-gateway/payment-gateway.module';
+import { RolesModule } from './modules/roles/roles.module';
+import { PermissionsModule } from './modules/permissions/permissions.module';
+import { RolePermissionsModule } from './modules/role-permissions/role-permissions.module';
 import { S3Module } from './s3/s3.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -43,6 +46,9 @@ import configuration from './config';
     NotificationModule,
     SubscriptionModule,
     PaymentGatewayModule,
+    RolesModule,
+    PermissionsModule,
+    RolePermissionsModule,
     S3Module,
   ],
   controllers: [AppController],
