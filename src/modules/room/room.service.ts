@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
-import { PrismaService } from '@/prisma/prisma.service';
-import { ValidatedHeaders } from '@/common/decorators/validated-headers.decorator';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ValidatedHeaders } from '../../common/decorators/validated-headers.decorator';
 
 @Injectable()
 export class RoomService {
