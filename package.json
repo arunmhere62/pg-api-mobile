@@ -10,7 +10,7 @@
     "build": "prisma generate && nest build",
     "build:render": "npm install --legacy-peer-deps && prisma generate && nest build",
     "build:windows": "npm install --legacy-peer-deps --no-audit && prisma generate && npm run build",
-    "build:vercel": "prisma generate && nest build && tsc-alias",
+    "build:vercel": "prisma generate && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
