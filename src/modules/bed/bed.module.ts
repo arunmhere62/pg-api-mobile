@@ -2,10 +2,10 @@ import { Module } from '@nestjs/common';
 import { BedService } from './bed.service';
 import { BedController } from './bed.controller';
 import { PrismaModule } from '../../prisma/prisma.module';
-import { S3Module } from '../../s3/s3.module';
+import { CommonModule } from '../common/common.module';
 
 @Module({
-  imports: [PrismaModule, S3Module],
+  imports: [PrismaModule, CommonModule],
   controllers: [BedController],
   providers: [BedService],
   exports: [BedService],

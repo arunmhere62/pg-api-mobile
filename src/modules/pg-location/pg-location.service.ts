@@ -1,12 +1,16 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { S3DeletionService } from '../common/s3-deletion.service';
 import { CreatePgLocationDto } from './dto/create-pg-location.dto';
 import { UpdatePgLocationDto } from './dto/update-pg-location.dto';
 import { ResponseUtil } from '../../common/utils/response.util';
 
 @Injectable()
 export class PgLocationService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private s3DeletionService: S3DeletionService,
+  ) {}
 
   /**
    * Get all PG locations for a user's organization
@@ -167,6 +171,24 @@ export class PgLocationService {
       throw new NotFoundException('PG location not found');
     }
 
+    // Handle S3 image deletion if images are being updated
+    if (updatePgLocationDto.images !== undefined) {
+      const oldImages = (Array.isArray(existingPg.images) ? existingPg.images : []) as string[];
+      const newImages = (Array.isArray(updatePgLocationDto.images) ? updatePgLocationDto.images : []) as string[];
+      
+      try {
+        await this.s3DeletionService.deleteRemovedFiles(
+          oldImages,
+          newImages,
+          'pg-location',
+          'images',
+        );
+      } catch (s3Error) {
+        console.error('S3 deletion error:', s3Error);
+        // Continue with update even if S3 deletion fails
+      }
+    }
+
     try {
       const updatedPgLocation = await this.prisma.pg_locations.update({
         where: {
@@ -198,11 +220,7 @@ export class PgLocationService {
         },
       });
 
-      return {
-        success: true,
-        message: 'PG location updated successfully',
-        data: updatedPgLocation,
-      };
+      return ResponseUtil.success(updatedPgLocation, 'PG location updated successfully');
     } catch (error) {
       console.error('Update PG location error:', error);
       throw new BadRequestException('Failed to update PG location');

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PendingRentCalculatorService } from '../common/pending-rent-calculator.service';
+import { S3DeletionService } from '../common/s3-deletion.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
@@ -14,6 +15,7 @@ export class TenantService {
     private pendingPaymentService: PendingPaymentService,
     private tenantStatusService: TenantStatusService,
     private pendingRentCalculatorService: PendingRentCalculatorService,
+    private s3DeletionService: S3DeletionService,
   ) {}
 
   /**
@@ -646,6 +648,32 @@ export class TenantService {
       }
     }
 
+    // Handle S3 image deletion if images are being updated
+    if (updateTenantDto.images !== undefined) {
+      const oldImages = (Array.isArray(existingTenant.images) ? existingTenant.images : []) as string[];
+      const newImages = (Array.isArray(updateTenantDto.images) ? updateTenantDto.images : []) as string[];
+      
+      await this.s3DeletionService.deleteRemovedFiles(
+        oldImages,
+        newImages,
+        'tenant',
+        'images',
+      );
+    }
+
+    // Handle S3 proof document deletion if proof_documents are being updated
+    if (updateTenantDto.proof_documents !== undefined) {
+      const oldDocuments = (Array.isArray(existingTenant.proof_documents) ? existingTenant.proof_documents : []) as string[];
+      const newDocuments = (Array.isArray(updateTenantDto.proof_documents) ? updateTenantDto.proof_documents : []) as string[];
+      
+      await this.s3DeletionService.deleteRemovedFiles(
+        oldDocuments,
+        newDocuments,
+        'tenant',
+        'proof documents',
+      );
+    }
+
     // Update tenant
     const tenant = await this.prisma.tenants.update({
       where: { s_no: id },
@@ -973,4 +1001,5 @@ export class TenantService {
     
     return Object.values(monthlyStats).sort((a: any, b: any) => a.month.localeCompare(b.month));
   }
+
 }

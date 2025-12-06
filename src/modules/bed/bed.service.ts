@@ -2,14 +2,14 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { CreateBedDto } from './dto/create-bed.dto';
 import { UpdateBedDto } from './dto/update-bed.dto';
 import { PrismaService } from '../../prisma/prisma.service';
-import { S3Service } from '../../s3/s3.service';
+import { S3DeletionService } from '../common/s3-deletion.service';
 import { ResponseUtil } from '../../common/utils/response.util';
 
 @Injectable()
 export class BedService {
   constructor(
     private prisma: PrismaService,
-    private s3Service: S3Service,
+    private s3DeletionService: S3DeletionService,
   ) {}
 
   /**
@@ -282,18 +282,6 @@ export class BedService {
   }
 
   /**
-   * Extract S3 key from URL
-   */
-  private extractS3KeyFromUrl(url: string): string | null {
-    try {
-      const urlObj = new URL(url);
-      return urlObj.pathname.substring(1); // Remove leading slash
-    } catch {
-      return null;
-    }
-  }
-
-  /**
    * Update bed
    */
   async update(id: number, updateBedDto: UpdateBedDto) {
@@ -328,30 +316,16 @@ export class BedService {
       const oldImages = (Array.isArray(existingBed.images) ? existingBed.images : []) as string[];
       const newImages = (Array.isArray(updateBedDto.images) ? updateBedDto.images : []) as string[];
       
-      // Find images that were removed
-      const removedImages = oldImages.filter((oldUrl: string) => 
-        !newImages.includes(oldUrl) && oldUrl && oldUrl.includes('amazonaws.com')
-      );
-
-      // Delete removed images from S3 using S3Service
-      if (removedImages.length > 0) {
-        try {
-          const keysToDelete = removedImages
-            .map((imageUrl: string) => this.extractS3KeyFromUrl(imageUrl))
-            .filter((key: string | null): key is string => key !== null);
-
-          if (keysToDelete.length > 0) {
-            console.log('Deleting removed images from S3:', keysToDelete);
-            await this.s3Service.deleteMultipleFiles({
-              keys: keysToDelete,
-              bucket: process.env.AWS_S3_BUCKET_NAME || 'indianpgmanagement',
-            });
-            console.log('S3 images deleted successfully:', keysToDelete);
-          }
-        } catch (error) {
-          console.warn('Failed to delete S3 images:', error);
-          // Don't throw - continue with update even if S3 deletion fails
-        }
+      try {
+        await this.s3DeletionService.deleteRemovedFiles(
+          oldImages,
+          newImages,
+          'bed',
+          'images',
+        );
+      } catch (error) {
+        console.warn('Failed to delete S3 images:', error);
+        // Don't throw - continue with update even if S3 deletion fails
       }
     }
 

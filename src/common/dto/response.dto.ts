@@ -7,26 +7,26 @@ export interface ApiResponse<T = any> {
   success: boolean;
   statusCode: number;
   message: string;
-  data?: T;
   error?: {
     code: string;
     details?: any;
   };
   timestamp: string;
   path?: string;
+  [key: string]: any; // Allow spreading data properties directly
 }
 
 export class ApiResponseDto<T = any> implements ApiResponse<T> {
   success: boolean;
   statusCode: number;
   message: string;
-  data?: T;
   error?: {
     code: string;
     details?: any;
   };
   timestamp: string;
   path?: string;
+  [key: string]: any;
 
   constructor(
     statusCode: number,
@@ -38,9 +38,13 @@ export class ApiResponseDto<T = any> implements ApiResponse<T> {
     this.statusCode = statusCode;
     this.message = message;
     this.success = statusCode >= 200 && statusCode < 300;
-    this.data = data;
     this.error = error;
     this.timestamp = new Date().toISOString();
     this.path = path;
+    
+    // Always wrap data in a data property to maintain consistent structure
+    if (data !== undefined && data !== null) {
+      this['data'] = data;
+    }
   }
 }

@@ -1,6 +1,16 @@
 /**
  * Response Utility Helper
  * Provides helper methods for creating consistent API responses
+ * 
+ * Response Structure:
+ * {
+ *   "success": true,
+ *   "statusCode": 200,
+ *   "message": "Success",
+ *   "data": { ... },
+ *   "timestamp": "...",
+ *   "path": "..."
+ * }
  */
 
 import { ApiResponseDto } from '../dto/response.dto';
@@ -9,6 +19,7 @@ import { HttpStatus } from '@nestjs/common';
 export class ResponseUtil {
   /**
    * Create a success response
+   * The data parameter will be wrapped in the response.data field
    */
   static success<T>(
     data: T,
@@ -30,6 +41,7 @@ export class ResponseUtil {
 
   /**
    * Create a paginated response
+   * Returns data with items and pagination at the root level
    */
   static paginated<T>(
     data: T[],

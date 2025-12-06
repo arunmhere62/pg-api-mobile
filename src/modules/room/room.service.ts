@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { PrismaService } from '../../prisma/prisma.service';
-import { S3Service } from '../../s3/s3.service';
+import { S3DeletionService } from '../common/s3-deletion.service';
 import { ValidatedHeaders } from '../../common/decorators/validated-headers.decorator';
 import { ResponseUtil } from '../../common/utils/response.util';
 
@@ -10,7 +10,7 @@ import { ResponseUtil } from '../../common/utils/response.util';
 export class RoomService {
   constructor(
     private prisma: PrismaService,
-    private s3Service: S3Service,
+    private s3DeletionService: S3DeletionService,
   ) {}
 
   /**
@@ -200,18 +200,6 @@ export class RoomService {
   }
 
   /**
-   * Extract S3 key from URL
-   */
-  private extractS3KeyFromUrl(url: string): string | null {
-    try {
-      const urlObj = new URL(url);
-      return urlObj.pathname.substring(1); // Remove leading slash
-    } catch {
-      return null;
-    }
-  }
-
-  /**
    * Update room
    */
   async update(id: number, updateRoomDto: UpdateRoomDto) {
@@ -232,31 +220,12 @@ export class RoomService {
       const oldImages = (Array.isArray(existingRoom.images) ? existingRoom.images : []) as string[];
       const newImages = (Array.isArray(updateRoomDto.images) ? updateRoomDto.images : []) as string[];
       
-      // Find images that were removed
-      const removedImages = oldImages.filter((oldUrl: string) => 
-        !newImages.includes(oldUrl) && oldUrl && oldUrl.includes('amazonaws.com')
+      await this.s3DeletionService.deleteRemovedFiles(
+        oldImages,
+        newImages,
+        'room',
+        'images',
       );
-
-      // Delete removed images from S3 using S3Service
-      if (removedImages.length > 0) {
-        try {
-          const keysToDelete = removedImages
-            .map((imageUrl: string) => this.extractS3KeyFromUrl(imageUrl))
-            .filter((key: string | null): key is string => key !== null);
-
-          if (keysToDelete.length > 0) {
-            console.log('Deleting removed images from S3:', keysToDelete);
-            await this.s3Service.deleteMultipleFiles({
-              keys: keysToDelete,
-              bucket: process.env.AWS_S3_BUCKET_NAME || 'indianpgmanagement',
-            });
-            console.log('S3 images deleted successfully:', keysToDelete);
-          }
-        } catch (error) {
-          console.warn('Failed to delete S3 images:', error);
-          // Don't throw - continue with update even if S3 deletion fails
-        }
-      }
     }
 
     const room = await this.prisma.rooms.update({
@@ -316,6 +285,16 @@ export class RoomService {
     if (bedCount > 0) {
       throw new BadRequestException(
         `Cannot delete room. It has ${bedCount} bed(s) associated with it. Please delete all beds first.`,
+      );
+    }
+
+    // Delete S3 images before soft deleting room
+    if (existingRoom.images && Array.isArray(existingRoom.images) && existingRoom.images.length > 0) {
+      const roomImages = (existingRoom.images as string[]);
+      await this.s3DeletionService.deleteAllFiles(
+        roomImages,
+        'room',
+        'images',
       );
     }
 
