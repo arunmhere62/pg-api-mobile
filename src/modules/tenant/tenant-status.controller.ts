@@ -53,13 +53,13 @@ export class TenantStatusController {
           select: {
             s_no: true,
             room_no: true,
-            rent_price: true,
           },
         },
         beds: {
           select: {
             s_no: true,
             bed_no: true,
+            bed_price: true,
           },
         },
         tenant_payments: {
@@ -157,13 +157,13 @@ export class TenantStatusController {
           select: {
             s_no: true,
             room_no: true,
-            rent_price: true,
           },
         },
         beds: {
           select: {
             s_no: true,
             bed_no: true,
+            bed_price: true,
           },
         },
         tenant_payments: {
@@ -261,13 +261,13 @@ export class TenantStatusController {
           select: {
             s_no: true,
             room_no: true,
-            rent_price: true,
           },
         },
         beds: {
           select: {
             s_no: true,
             bed_no: true,
+            bed_price: true,
           },
         },
         tenant_payments: {
@@ -365,13 +365,13 @@ export class TenantStatusController {
           select: {
             s_no: true,
             room_no: true,
-            rent_price: true,
           },
         },
         beds: {
           select: {
             s_no: true,
             bed_no: true,
+            bed_price: true,
           },
         },
         tenant_payments: {
@@ -453,7 +453,12 @@ export class TenantStatusController {
       include: {
         rooms: {
           select: {
-            rent_price: true,
+            room_no: true,
+          },
+        },
+        beds: {
+          select: {
+            bed_price: true,
           },
         },
         tenant_payments: {
@@ -526,7 +531,12 @@ export class TenantStatusController {
       include: {
         rooms: {
           select: {
-            rent_price: true,
+            room_no: true,
+          },
+        },
+        beds: {
+          select: {
+            bed_price: true,
           },
         },
         tenant_payments: {
@@ -586,7 +596,7 @@ export class TenantStatusController {
       check_out_date: tenant.check_out_date,
       rooms: tenant.rooms
         ? {
-            rent_price: tenant.rooms.rent_price.toString(),
+            rent_price: tenant.beds?.bed_price?.toString(),
           }
         : undefined,
     });

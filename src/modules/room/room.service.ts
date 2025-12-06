@@ -30,7 +30,6 @@ export class RoomService {
           where: { s_no: existingDeletedRoom.s_no },
           data: {
             is_deleted: false,
-            rent_price: createRoomDto.rent_price,
             images: createRoomDto.images,
             updated_at: new Date(),
           },
@@ -48,6 +47,7 @@ export class RoomService {
               select: {
                 s_no: true,
                 bed_no: true,
+                bed_price: true,
               },
             },
           },
@@ -64,7 +64,6 @@ export class RoomService {
           data: {
             pg_id: createRoomDto.pg_id,
             room_no: createRoomDto.room_no,
-            rent_price: createRoomDto.rent_price,
             images: createRoomDto.images,
           },
           include: {
@@ -81,6 +80,7 @@ export class RoomService {
               select: {
                 s_no: true,
                 bed_no: true,
+                bed_price: true,
               },
             },
           },
@@ -146,6 +146,7 @@ export class RoomService {
             select: {
               s_no: true,
               bed_no: true,
+              bed_price: true,
             },
           },
         },
@@ -196,6 +197,7 @@ export class RoomService {
           select: {
             s_no: true,
             bed_no: true,
+            bed_price: true,
           },
           orderBy: {
             bed_no: 'asc',
@@ -237,7 +239,6 @@ export class RoomService {
       where: { s_no: id },
       data: {
         room_no: updateRoomDto.room_no,
-        rent_price: updateRoomDto.rent_price,
         images: updateRoomDto.images,
       },
       include: {
@@ -254,6 +255,7 @@ export class RoomService {
           select: {
             s_no: true,
             bed_no: true,
+            bed_price: true,
           },
         },
       },

@@ -3,6 +3,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import * as bodyParser from 'body-parser';
+// import { RateLimitInterceptor } from './common/interceptors/rate-limit.interceptor';
+// import { PerformanceInterceptor } from './common/interceptors/performance.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -32,6 +34,10 @@ async function bootstrap() {
     }),
   );
 
+  // Add performance interceptors (temporarily disabled)
+  // app.useGlobalInterceptors(new PerformanceInterceptor());
+  // app.useGlobalInterceptors(new RateLimitInterceptor());
+
   // Swagger configuration
   const config = new DocumentBuilder()
     .setTitle('PG Management API')
@@ -54,6 +60,7 @@ async function bootstrap() {
   
   console.log(`🚀 Application is running on: http://localhost:${port}`);
   console.log(`📚 Swagger documentation: http://localhost:${port}/api/docs`);
+  console.log(`⚡ Ready for multiple concurrent requests`);
 }
 
 bootstrap();

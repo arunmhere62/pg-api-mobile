@@ -1,4 +1,4 @@
-import { IsString, IsInt, IsOptional } from 'class-validator';
+import { IsString, IsInt, IsOptional, IsNumber, Min } from 'class-validator';
 
 export class CreateBedDto {
   @IsInt()
@@ -13,4 +13,9 @@ export class CreateBedDto {
 
   @IsOptional()
   images?: any;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  bed_price?: number;
 }

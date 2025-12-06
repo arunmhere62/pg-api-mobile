@@ -285,13 +285,13 @@ export class TenantPaymentService {
             select: {
               s_no: true,
               room_no: true,
-              rent_price: true,
             },
           },
           beds: {
             select: {
               s_no: true,
               bed_no: true,
+              bed_price: true,
             },
           },
           pg_locations: {

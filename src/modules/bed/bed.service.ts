@@ -58,6 +58,7 @@ export class BedService {
             is_deleted: false,
             pg_id: createBedDto.pg_id,
             images: createBedDto.images,
+            bed_price: createBedDto.bed_price,
             updated_at: new Date(),
           },
           include: {
@@ -83,6 +84,7 @@ export class BedService {
             bed_no: createBedDto.bed_no,
             pg_id: createBedDto.pg_id,
             images: createBedDto.images,
+            bed_price: createBedDto.bed_price,
           },
           include: {
             rooms: {
@@ -287,7 +289,6 @@ export class BedService {
           select: {
             s_no: true,
             room_no: true,
-            rent_price: true,
             pg_locations: {
               select: {
                 s_no: true,
@@ -347,6 +348,7 @@ export class BedService {
         bed_no: updateBedDto.bed_no,
         pg_id: updateBedDto.pg_id,
         images: updateBedDto.images,
+        bed_price: updateBedDto.bed_price,
       },
       include: {
         rooms: {

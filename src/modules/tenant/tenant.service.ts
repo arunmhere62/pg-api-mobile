@@ -197,13 +197,13 @@ export class TenantService {
           select: {
             s_no: true,
             room_no: true,
-            rent_price: true,
           },
         },
         beds: {
           select: {
             s_no: true,
             bed_no: true,
+            bed_price: true,
           },
         },
         city: {
@@ -507,13 +507,13 @@ export class TenantService {
           select: {
             s_no: true,
             room_no: true,
-            rent_price: true,
           },
         },
         beds: {
           select: {
             s_no: true,
             bed_no: true,
+            bed_price: true,
           },
         },
         city: {
@@ -790,7 +790,7 @@ export class TenantService {
       // Calculate detailed pending rent information
       const pendingRentDetails = this.pendingRentCalculatorService.calculatePendingRentDetails(
         tenant.check_in_date.toISOString(),
-        Number(tenant.rooms?.rent_price || 0),
+        Number(tenant.beds?.bed_price || 0),
         transformedTenantPayments,
         transformedAdvancePayments
       );
@@ -805,7 +805,7 @@ export class TenantService {
             room: tenant.rooms?.room_no,
             bed: tenant.beds?.bed_no,
             check_in_date: tenant.check_in_date,
-            current_rent: tenant.rooms?.rent_price,
+            current_rent: tenant.beds?.bed_price,
           },
           pending_rent_details: pendingRentDetails,
         },

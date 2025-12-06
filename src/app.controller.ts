@@ -20,4 +20,22 @@ export class AppController {
   getHealth(): object {
     return this.appService.getHealth();
   }
+
+  @Get('api/v1/health')
+  @ApiOperation({ summary: 'Detailed health check' })
+  @ApiResponse({ status: 200, description: 'Detailed service health status' })
+  getApiHealth(): object {
+    return {
+      status: 'healthy',
+      service: 'PG Management API',
+      version: '1.0.0',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      memory: {
+        used: `${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`,
+        total: `${Math.round(process.memoryUsage().heapTotal / 1024 / 1024)}MB`,
+      },
+      pid: process.pid,
+    };
+  }
 }

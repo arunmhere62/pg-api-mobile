@@ -48,7 +48,11 @@ export class PendingPaymentService {
         rooms: {
           select: {
             room_no: true,
-            rent_price: true,
+          },
+        },
+        beds: {
+          select: {
+            bed_price: true,
           },
         },
         tenant_payments: {
@@ -83,13 +87,13 @@ export class PendingPaymentService {
         current_month_pending: 0,
         overdue_months: 0,
         payment_status: 'PAID',
-        monthly_rent: tenant.rooms?.rent_price ? parseFloat(tenant.rooms.rent_price.toString()) : 0,
+        monthly_rent: tenant.beds?.bed_price ? parseFloat(tenant.beds.bed_price.toString()) : 0,
         pending_months: [],
       };
     }
 
-    const monthlyRent = tenant.rooms?.rent_price
-      ? parseFloat(tenant.rooms.rent_price.toString())
+    const monthlyRent = tenant.beds?.bed_price
+      ? parseFloat(tenant.beds.bed_price.toString())
       : 0;
     
     const today = new Date();
@@ -264,13 +268,13 @@ export class PendingPaymentService {
           select: {
             s_no: true,
             room_no: true,
-            rent_price: true,
           },
         },
         beds: {
           select: {
             s_no: true,
             bed_no: true,
+            bed_price: true,
           },
         },
         tenant_payments: {
@@ -381,7 +385,11 @@ export class PendingPaymentService {
         rooms: {
           select: {
             room_no: true,
-            rent_price: true,
+          },
+        },
+        beds: {
+          select: {
+            bed_price: true,
           },
         },
         tenant_payments: {
@@ -417,8 +425,8 @@ export class PendingPaymentService {
         tenant_name: tenant.name,
         room_no: tenant.rooms?.room_no,
         last_payment_end_date: tenant.tenant_payments[0].end_date.toISOString(),
-        monthly_rent: tenant.rooms?.rent_price
-          ? parseFloat(tenant.rooms.rent_price.toString())
+        monthly_rent: tenant.beds?.bed_price
+          ? parseFloat(tenant.beds.bed_price.toString())
           : 0,
       }));
 

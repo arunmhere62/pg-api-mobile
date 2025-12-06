@@ -3,7 +3,7 @@ module.exports = {
     {
       name: 'pg-api',
       script: './dist/main.js',
-      instances: 1,
+      instances: 'max', // Use all CPU cores
       exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',

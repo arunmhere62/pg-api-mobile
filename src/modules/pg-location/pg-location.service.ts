@@ -657,12 +657,12 @@ export class PgLocationService {
           rooms: {
             select: {
               room_no: true,
-              rent_price: true,
             },
           },
           beds: {
             select: {
               bed_no: true,
+              bed_price: true,
             },
           },
           tenant_payments: {
@@ -691,7 +691,7 @@ export class PgLocationService {
       // Process each tenant's payment history
       for (const tenant of tenants) {
         const checkInDate = new Date(tenant.check_in_date);
-        const rentPrice = Number(tenant.rooms?.rent_price || 0);
+        const rentPrice = Number(tenant.beds?.bed_price || 0);
         
         if (rentPrice === 0) continue; // Skip if rent price is not set
         
