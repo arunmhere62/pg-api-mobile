@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, ConflictException }
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { ResponseUtil } from '../../common/utils/response.util';
 
 @Injectable()
 export class EmployeeService {
@@ -66,11 +67,7 @@ export class EmployeeService {
     // Remove password from response
     const { password, ...employeeWithoutPassword } = employee;
 
-    return {
-      success: true,
-      message: 'Employee created successfully',
-      data: employeeWithoutPassword,
-    };
+    return employeeWithoutPassword;
   }
 
   /**
@@ -155,17 +152,7 @@ export class EmployeeService {
       this.prisma.user.count({ where: whereClause }),
     ]);
 
-    return {
-      success: true,
-      data: employees,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: page < Math.ceil(total / limit),
-      },
-    };
+    return ResponseUtil.paginated(employees, total, page, limit, 'Employees fetched successfully');
   }
 
   /**
@@ -222,10 +209,7 @@ export class EmployeeService {
       throw new NotFoundException('Employee not found');
     }
 
-    return {
-      success: true,
-      data: employee,
-    };
+    return employee;
   }
 
   /**
@@ -301,11 +285,7 @@ export class EmployeeService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Employee updated successfully',
-      data: employee,
-    };
+    return employee;
   }
 
   /**
@@ -333,10 +313,7 @@ export class EmployeeService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Employee deleted successfully',
-    };
+    return ResponseUtil.noContent('Employee deleted successfully');
   }
 
   /**
@@ -362,14 +339,11 @@ export class EmployeeService {
       }),
     ]);
 
-    return {
-      success: true,
-      data: {
-        totalEmployees,
-        activeEmployees,
-        inactiveEmployees: totalEmployees - activeEmployees,
-        employeesByRole,
-      },
-    };
+    return ResponseUtil.success({
+      totalEmployees,
+      activeEmployees,
+      inactiveEmployees: totalEmployees - activeEmployees,
+      employeesByRole,
+    }, 'Employee statistics fetched successfully');
   }
 }

@@ -189,32 +189,19 @@ export class PaymentGatewayService {
    * Get payment status for mobile app (formatted response)
    */
   async getPaymentStatus(orderId: string) {
-    try {
-      const payment = await this.getPaymentByOrderId(orderId);
+    const payment = await this.getPaymentByOrderId(orderId);
 
-      return {
-        success: true,
-        payment: {
-          orderId: payment.order_id,
-          amount: payment.amount,
-          currency: payment.currency,
-          status: payment.status,
-          trackingId: payment.tracking_id,
-          bankRefNo: payment.bank_ref_no,
-          paymentMode: payment.payment_mode,
-          statusMessage: payment.status_message,
-          createdAt: payment.created_at,
-          updatedAt: payment.updated_at,
-        },
-      };
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        return {
-          success: false,
-          message: 'Payment not found',
-        };
-      }
-      throw error;
-    }
+    return {
+      orderId: payment.order_id,
+      amount: payment.amount,
+      currency: payment.currency,
+      status: payment.status,
+      trackingId: payment.tracking_id,
+      bankRefNo: payment.bank_ref_no,
+      paymentMode: payment.payment_mode,
+      statusMessage: payment.status_message,
+      createdAt: payment.created_at,
+      updatedAt: payment.updated_at,
+    };
   }
 }

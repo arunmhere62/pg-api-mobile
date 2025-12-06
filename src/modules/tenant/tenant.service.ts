@@ -5,6 +5,7 @@ import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { PendingPaymentService } from './pending-payment.service';
 import { TenantStatusService } from './tenant-status.service';
+import { ResponseUtil } from '../../common/utils/response.util';
 
 @Injectable()
 export class TenantService {
@@ -19,119 +20,109 @@ export class TenantService {
    * Create a new tenant
    */
   async create(createTenantDto: CreateTenantDto) {
-    try {   
-      // Generate unique tenant_id
-      const tenantId = await this.generateTenantId();
+    // Generate unique tenant_id
+    const tenantId = await this.generateTenantId();
 
-      // Verify PG location exists
-      const pgLocation = await this.prisma.pg_locations.findUnique({
-        where: { s_no: createTenantDto.pg_id },
-      });
+    // Verify PG location exists
+    const pgLocation = await this.prisma.pg_locations.findUnique({
+      where: { s_no: createTenantDto.pg_id },
+    });
 
-      if (!pgLocation) {
-        throw new NotFoundException(`PG Location with ID ${createTenantDto.pg_id} not found`);
-      }
-
-      // Verify room exists if provided
-      if (createTenantDto.room_id) {
-        const room = await this.prisma.rooms.findUnique({
-          where: { s_no: createTenantDto.room_id },
-        });
-
-        if (!room) {
-          throw new NotFoundException(`Room with ID ${createTenantDto.room_id} not found`);
-        }
-      }
-
-      // Verify bed exists if provided
-      if (createTenantDto.bed_id) {
-        const bed = await this.prisma.beds.findUnique({
-          where: { s_no: createTenantDto.bed_id },
-        });
-
-        if (!bed) {
-          throw new NotFoundException(`Bed with ID ${createTenantDto.bed_id} not found`);
-        }
-
-        // Check if bed is already occupied by another active tenant
-        const occupiedBed = await this.prisma.tenants.findFirst({
-          where: {
-            bed_id: createTenantDto.bed_id,
-            status: 'ACTIVE',
-            is_deleted: false,
-          },
-        });
-
-        if (occupiedBed) {
-          throw new BadRequestException(`Bed with ID ${createTenantDto.bed_id} is already occupied`);
-        }
-      }
-
-      // Create tenant
-      const tenant = await this.prisma.tenants.create({
-        data: {
-          tenant_id: tenantId,
-          name: createTenantDto.name,
-          phone_no: createTenantDto.phone_no,
-          whatsapp_number: createTenantDto.whatsapp_number,
-          email: createTenantDto.email,
-          pg_id: createTenantDto.pg_id,
-          room_id: createTenantDto.room_id,
-          bed_id: createTenantDto.bed_id,
-          check_in_date: new Date(createTenantDto.check_in_date),
-          check_out_date: createTenantDto.check_out_date ? new Date(createTenantDto.check_out_date) : null,
-          status: (createTenantDto.status as any) || 'ACTIVE',
-          occupation: createTenantDto.occupation,
-          tenant_address: createTenantDto.tenant_address,
-          city_id: createTenantDto.city_id,
-          state_id: createTenantDto.state_id,
-          images: createTenantDto.images,
-          proof_documents: createTenantDto.proof_documents,
-        },
-        include: {
-          pg_locations: {
-            select: {
-              s_no: true,
-              location_name: true,
-            },
-          },
-          rooms: {
-            select: {
-              s_no: true,
-              room_no: true,
-            },
-          },
-          beds: {
-            select: {
-              s_no: true,
-              bed_no: true,
-            },
-          },
-          city: {
-            select: {
-              s_no: true,
-              name: true,
-            },
-          },
-          state: {
-            select: {
-              s_no: true,
-              name: true,
-            },
-          },
-        },
-      });
-
-      // Bed is now occupied (tracked by tenant record)
-
-      return {
-        success: true,
-        message: 'Tenant created successfully',
-        data: tenant,
-      };
-    } catch (error) {
-      throw error;
+    if (!pgLocation) {
+      throw new NotFoundException(`PG Location with ID ${createTenantDto.pg_id} not found`);
     }
+
+    // Verify room exists if provided
+    if (createTenantDto.room_id) {
+      const room = await this.prisma.rooms.findUnique({
+        where: { s_no: createTenantDto.room_id },
+      });
+
+      if (!room) {
+        throw new NotFoundException(`Room with ID ${createTenantDto.room_id} not found`);
+      }
+    }
+
+    // Verify bed exists if provided
+    if (createTenantDto.bed_id) {
+      const bed = await this.prisma.beds.findUnique({
+        where: { s_no: createTenantDto.bed_id },
+      });
+
+      if (!bed) {
+        throw new NotFoundException(`Bed with ID ${createTenantDto.bed_id} not found`);
+      }
+
+      // Check if bed is already occupied by another active tenant
+      const occupiedBed = await this.prisma.tenants.findFirst({
+        where: {
+          bed_id: createTenantDto.bed_id,
+          status: 'ACTIVE',
+          is_deleted: false,
+        },
+      });
+
+      if (occupiedBed) {
+        throw new BadRequestException(`Bed with ID ${createTenantDto.bed_id} is already occupied`);
+      }
+    }
+
+    // Create tenant
+    const tenant = await this.prisma.tenants.create({
+      data: {
+        tenant_id: tenantId,
+        name: createTenantDto.name,
+        phone_no: createTenantDto.phone_no,
+        whatsapp_number: createTenantDto.whatsapp_number,
+        email: createTenantDto.email,
+        pg_id: createTenantDto.pg_id,
+        room_id: createTenantDto.room_id,
+        bed_id: createTenantDto.bed_id,
+        check_in_date: new Date(createTenantDto.check_in_date),
+        check_out_date: createTenantDto.check_out_date ? new Date(createTenantDto.check_out_date) : null,
+        status: (createTenantDto.status as any) || 'ACTIVE',
+        occupation: createTenantDto.occupation,
+        tenant_address: createTenantDto.tenant_address,
+        city_id: createTenantDto.city_id,
+        state_id: createTenantDto.state_id,
+        images: createTenantDto.images,
+        proof_documents: createTenantDto.proof_documents,
+      },
+      include: {
+        pg_locations: {
+          select: {
+            s_no: true,
+            location_name: true,
+          },
+        },
+        rooms: {
+          select: {
+            s_no: true,
+            room_no: true,
+          },
+        },
+        beds: {
+          select: {
+            s_no: true,
+            bed_no: true,
+          },
+        },
+        city: {
+          select: {
+            s_no: true,
+            name: true,
+          },
+        },
+        state: {
+          select: {
+            s_no: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    return tenant;
   }
 
   /**
@@ -743,261 +734,218 @@ export class TenantService {
    * Get detailed pending rent information for a tenant
    */
   async getTenantPendingRentDetails(tenantId: number) {
-    try {
-      // Get tenant with all payment data
-      const tenant = await this.prisma.tenants.findUnique({
-        where: { s_no: tenantId },
-        include: {
-          rooms: true,
-          beds: true,
-          tenant_payments: {
-            orderBy: { payment_date: 'desc' }
-          },
-          advance_payments: {
-            orderBy: { payment_date: 'desc' }
-          },
-          refund_payments: {
-            orderBy: { payment_date: 'desc' }
-          },
+    // Get tenant with all payment data
+    const tenant = await this.prisma.tenants.findUnique({
+      where: { s_no: tenantId },
+      include: {
+        rooms: true,
+        beds: true,
+        tenant_payments: {
+          orderBy: { payment_date: 'desc' }
         },
-      });
-
-      if (!tenant) {
-        return {
-          success: false,
-          message: 'Tenant not found',
-        };
-      }
-
-      // Transform tenant_payments to match TenantPayment interface
-      const transformedTenantPayments = (tenant.tenant_payments || []).map(payment => ({
-        ...payment,
-        payment_date: payment.payment_date.toISOString(),
-        amount_paid: payment.amount_paid.toString(),
-        actual_rent_amount: payment.actual_rent_amount.toString(),
-        start_date: payment.start_date.toISOString(),
-        end_date: payment.end_date.toISOString()
-      }));
-
-      // Transform advance_payments to match AdvancePayment interface
-      const transformedAdvancePayments = (tenant.advance_payments || []).map(payment => ({
-        ...payment,
-        payment_date: payment.payment_date.toISOString(),
-        amount_paid: payment.amount_paid.toString(),
-        actual_rent_amount: payment.actual_rent_amount.toString()
-      }));
-
-      // Calculate detailed pending rent information
-      const pendingRentDetails = this.pendingRentCalculatorService.calculatePendingRentDetails(
-        tenant.check_in_date.toISOString(),
-        Number(tenant.beds?.bed_price || 0),
-        transformedTenantPayments,
-        transformedAdvancePayments
-      );
-
-      return {
-        success: true,
-        data: {
-          tenant: {
-            id: tenant.s_no,
-            name: tenant.name,
-            tenant_id: tenant.tenant_id,
-            room: tenant.rooms?.room_no,
-            bed: tenant.beds?.bed_no,
-            check_in_date: tenant.check_in_date,
-            current_rent: tenant.beds?.bed_price,
-          },
-          pending_rent_details: pendingRentDetails,
+        advance_payments: {
+          orderBy: { payment_date: 'desc' }
         },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to calculate pending rent details',
-        error: error.message,
-      };
+        refund_payments: {
+          orderBy: { payment_date: 'desc' }
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
     }
+
+    // Transform tenant_payments to match TenantPayment interface
+    const transformedTenantPayments = (tenant.tenant_payments || []).map(payment => ({
+      ...payment,
+      payment_date: payment.payment_date.toISOString(),
+      amount_paid: payment.amount_paid.toString(),
+      actual_rent_amount: payment.actual_rent_amount.toString(),
+      start_date: payment.start_date.toISOString(),
+      end_date: payment.end_date.toISOString()
+    }));
+
+    // Transform advance_payments to match AdvancePayment interface
+    const transformedAdvancePayments = (tenant.advance_payments || []).map(payment => ({
+      ...payment,
+      payment_date: payment.payment_date.toISOString(),
+      amount_paid: payment.amount_paid.toString(),
+      actual_rent_amount: payment.actual_rent_amount.toString()
+    }));
+
+    // Calculate detailed pending rent information
+    const pendingRentDetails = this.pendingRentCalculatorService.calculatePendingRentDetails(
+      tenant.check_in_date.toISOString(),
+      Number(tenant.beds?.bed_price || 0),
+      transformedTenantPayments,
+      transformedAdvancePayments
+    );
+
+    return ResponseUtil.success({
+      tenant: {
+        id: tenant.s_no,
+        name: tenant.name,
+        tenant_id: tenant.tenant_id,
+        room: tenant.rooms?.room_no,
+        bed: tenant.beds?.bed_no,
+        check_in_date: tenant.check_in_date,
+        current_rent: tenant.beds?.bed_price,
+      },
+      pending_rent_details: pendingRentDetails,
+    }, 'Pending rent details fetched successfully');
   }
 
   /**
    * Get pending rent summary for all tenants with detailed breakdown
    */
   async getAllTenantsPendingRentSummary(params: any) {
-    try {
-      // Get all tenants with payment data
-      const tenants = await this.prisma.tenants.findMany({
-        where: {
-          pg_id: params.pg_id,
-          is_deleted: false,
+    // Get all tenants with payment data
+    const tenants = await this.prisma.tenants.findMany({
+      where: {
+        pg_id: params.pg_id,
+        is_deleted: false,
+      },
+      include: {
+        rooms: true,
+        beds: true,
+        tenant_payments: {
+          orderBy: { payment_date: 'desc' }
         },
-        include: {
-          rooms: true,
-          beds: true,
-          tenant_payments: {
-            orderBy: { payment_date: 'desc' }
-          },
-          advance_payments: {
-            orderBy: { payment_date: 'desc' }
-          },
-          refund_payments: {
-            orderBy: { payment_date: 'desc' }
-          },
+        advance_payments: {
+          orderBy: { payment_date: 'desc' }
         },
-        take: params.limit || 50,
-        skip: ((params.page || 1) - 1) * (params.limit || 50),
-      });
-
-      // Calculate pending rent details for all tenants
-      const tenantsWithPendingRent = this.pendingRentCalculatorService.getBulkPendingRentSummary(tenants);
-
-      // Sort by total pending amount (highest first)
-      const sortedTenants = tenantsWithPendingRent.sort(
-        (a, b) => b.total_pending_amount - a.total_pending_amount
-      );
-
-      // Calculate summary statistics
-      const summary = {
-        total_tenants: sortedTenants.length,
-        tenants_with_pending: sortedTenants.filter(t => t.total_pending_amount > 0).length,
-        tenants_overdue: sortedTenants.filter(t => t.is_overdue).length,
-        total_pending_amount: sortedTenants.reduce((sum, t) => sum + t.total_pending_amount, 0),
-        tenants_need_follow_up: sortedTenants.filter(t => 
-          t.recommended_action === 'FOLLOW_UP' || t.recommended_action === 'URGENT_FOLLOW_UP'
-        ).length,
-        tenants_need_notice: sortedTenants.filter(t => 
-          t.recommended_action === 'NOTICE' || t.recommended_action === 'EVICTION_WARNING'
-        ).length,
-      };
-
-      return {
-        success: true,
-        data: sortedTenants,
-        summary,
-        pagination: {
-          page: params.page || 1,
-          limit: params.limit || 50,
-          total: sortedTenants.length,
+        refund_payments: {
+          orderBy: { payment_date: 'desc' }
         },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to get pending rent summary',
-        error: error.message,
-      };
-    }
+      },
+      take: params.limit || 50,
+      skip: ((params.page || 1) - 1) * (params.limit || 50),
+    });
+
+    // Calculate pending rent details for all tenants
+    const tenantsWithPendingRent = this.pendingRentCalculatorService.getBulkPendingRentSummary(tenants);
+
+    // Sort by total pending amount (highest first)
+    const sortedTenants = tenantsWithPendingRent.sort(
+      (a, b) => b.total_pending_amount - a.total_pending_amount
+    );
+
+    // Calculate summary statistics
+    const summary = {
+      total_tenants: sortedTenants.length,
+      tenants_with_pending: sortedTenants.filter(t => t.total_pending_amount > 0).length,
+      tenants_overdue: sortedTenants.filter(t => t.is_overdue).length,
+      total_pending_amount: sortedTenants.reduce((sum, t) => sum + t.total_pending_amount, 0),
+      tenants_need_follow_up: sortedTenants.filter(t => 
+        t.recommended_action === 'FOLLOW_UP' || t.recommended_action === 'URGENT_FOLLOW_UP'
+      ).length,
+      tenants_need_notice: sortedTenants.filter(t => 
+        t.recommended_action === 'NOTICE' || t.recommended_action === 'EVICTION_WARNING'
+      ).length,
+    };
+
+    return ResponseUtil.success({
+      tenants: sortedTenants,
+      summary,
+      pagination: {
+        page: params.page || 1,
+        limit: params.limit || 50,
+        total: sortedTenants.length,
+      },
+    }, 'Pending rent summary fetched successfully');
   }
 
   /**
    * Get tenants with overdue payments
    */
   async getOverdueTenants(params: any) {
-    try {
-      // Get all tenants
-      const tenants = await this.prisma.tenants.findMany({
-        where: {
-          pg_id: params.pg_id,
-          is_deleted: false,
+    // Get all tenants
+    const tenants = await this.prisma.tenants.findMany({
+      where: {
+        pg_id: params.pg_id,
+        is_deleted: false,
+      },
+      include: {
+        rooms: true,
+        beds: true,
+        tenant_payments: {
+          orderBy: { payment_date: 'desc' }
         },
-        include: {
-          rooms: true,
-          beds: true,
-          tenant_payments: {
-            orderBy: { payment_date: 'desc' }
-          },
-          advance_payments: {
-            orderBy: { payment_date: 'desc' }
-          },
+        advance_payments: {
+          orderBy: { payment_date: 'desc' }
         },
-      });
+      },
+    });
 
-      // Filter tenants with overdue payments
-      const overdueTenants = this.pendingRentCalculatorService.filterTenantsByPendingRent(
-        tenants,
-        {
-          minPendingAmount: params.min_amount ? parseInt(params.min_amount) : 0,
-          includeOverdue: true,
-        }
-      );
+    // Filter tenants with overdue payments
+    const overdueTenants = this.pendingRentCalculatorService.filterTenantsByPendingRent(
+      tenants,
+      {
+        minPendingAmount: params.min_amount ? parseInt(params.min_amount) : 0,
+        includeOverdue: true,
+      }
+    );
 
-      return {
-        success: true,
-        data: overdueTenants,
-        count: overdueTenants.length,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to get overdue tenants',
-        error: error.message,
-      };
-    }
+    return ResponseUtil.success({
+      tenants: overdueTenants,
+      count: overdueTenants.length,
+    }, 'Overdue tenants fetched successfully');
   }
 
   /**
    * Get pending rent statistics for dashboard
    */
   async getPendingRentStats(params: any) {
-    try {
-      // Get all tenants
-      const tenants = await this.prisma.tenants.findMany({
-        where: {
-          pg_id: params.pg_id,
-          is_deleted: false,
+    // Get all tenants
+    const tenants = await this.prisma.tenants.findMany({
+      where: {
+        pg_id: params.pg_id,
+        is_deleted: false,
+      },
+      include: {
+        rooms: true,
+        beds: true,
+        tenant_payments: {
+          orderBy: { payment_date: 'desc' }
         },
-        include: {
-          rooms: true,
-          beds: true,
-          tenant_payments: {
-            orderBy: { payment_date: 'desc' }
-          },
-          advance_payments: {
-            orderBy: { payment_date: 'desc' }
-          },
+        advance_payments: {
+          orderBy: { payment_date: 'desc' }
         },
-      });
+      },
+    });
 
-      const tenantsWithPendingRent = this.pendingRentCalculatorService.getBulkPendingRentSummary(tenants);
+    const tenantsWithPendingRent = this.pendingRentCalculatorService.getBulkPendingRentSummary(tenants);
 
-      // Calculate comprehensive statistics
-      const stats = {
-        total_tenants: tenantsWithPendingRent.length,
-        tenants_with_pending: tenantsWithPendingRent.filter(t => t.total_pending_amount > 0).length,
-        tenants_overdue: tenantsWithPendingRent.filter(t => t.is_overdue).length,
-        tenants_partial: tenantsWithPendingRent.filter(t => t.pending_rent_details.hasPartialPayments).length,
-        
-        total_pending_amount: tenantsWithPendingRent.reduce((sum, t) => sum + t.total_pending_amount, 0),
-        total_overdue_amount: tenantsWithPendingRent.reduce((sum, t) => 
-          sum + (t.is_overdue ? t.total_pending_amount : 0), 0
-        ),
-        
-        average_pending_per_tenant: tenantsWithPendingRent.length > 0 
-          ? tenantsWithPendingRent.reduce((sum, t) => sum + t.total_pending_amount, 0) / tenantsWithPendingRent.length
-          : 0,
-        
-        // Action recommendations
-        tenants_need_follow_up: tenantsWithPendingRent.filter(t => 
-          t.recommended_action === 'FOLLOW_UP' || t.recommended_action === 'URGENT_FOLLOW_UP'
-        ).length,
-        tenants_need_notice: tenantsWithPendingRent.filter(t => 
-          t.recommended_action === 'NOTICE' || t.recommended_action === 'EVICTION_WARNING'
-        ).length,
-        
-        // Monthly breakdown
-        pending_by_months: this.calculatePendingByMonths(tenantsWithPendingRent),
-      };
+    // Calculate comprehensive statistics
+    const stats = {
+      total_tenants: tenantsWithPendingRent.length,
+      tenants_with_pending: tenantsWithPendingRent.filter(t => t.total_pending_amount > 0).length,
+      tenants_overdue: tenantsWithPendingRent.filter(t => t.is_overdue).length,
+      tenants_partial: tenantsWithPendingRent.filter(t => t.pending_rent_details.hasPartialPayments).length,
+      
+      total_pending_amount: tenantsWithPendingRent.reduce((sum, t) => sum + t.total_pending_amount, 0),
+      total_overdue_amount: tenantsWithPendingRent.reduce((sum, t) => 
+        sum + (t.is_overdue ? t.total_pending_amount : 0), 0
+      ),
+      
+      average_pending_per_tenant: tenantsWithPendingRent.length > 0 
+        ? tenantsWithPendingRent.reduce((sum, t) => sum + t.total_pending_amount, 0) / tenantsWithPendingRent.length
+        : 0,
+      
+      // Action recommendations
+      tenants_need_follow_up: tenantsWithPendingRent.filter(t => 
+        t.recommended_action === 'FOLLOW_UP' || t.recommended_action === 'URGENT_FOLLOW_UP'
+      ).length,
+      tenants_need_notice: tenantsWithPendingRent.filter(t => 
+        t.recommended_action === 'NOTICE' || t.recommended_action === 'EVICTION_WARNING'
+      ).length,
+      
+      // Monthly breakdown
+      pending_by_months: this.calculatePendingByMonths(tenantsWithPendingRent),
+    };
 
-      return {
-        success: true,
-        data: stats,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to get pending rent statistics',
-        error: error.message,
-      };
-    }
+    return ResponseUtil.success(stats, 'Pending rent statistics fetched successfully');
   }
 
   private calculatePendingByMonths(tenants: any[]) {

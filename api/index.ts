@@ -14,7 +14,7 @@ async function createNestServer(expressInstance: express.Express) {
     new ExpressAdapter(expressInstance),
   );
 
-  // Increase payload size limit for image uploads (50MB)
+  // Payload size limit for image uploads (50MB - images are compressed on frontend)
   app.use(bodyParser.json({ limit: '50mb' }));
   app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 

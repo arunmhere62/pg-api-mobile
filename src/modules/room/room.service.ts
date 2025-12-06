@@ -2,98 +2,91 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { S3Service } from '../../s3/s3.service';
 import { ValidatedHeaders } from '../../common/decorators/validated-headers.decorator';
+import { ResponseUtil } from '../../common/utils/response.util';
 
 @Injectable()
 export class RoomService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private s3Service: S3Service,
+  ) {}
 
   /**
    * Create a new room or restore soft-deleted room
    */
   async create(createRoomDto: CreateRoomDto) {
-    try {
-      // Check if a soft-deleted room exists with the same pg_id and room_no
-      const existingDeletedRoom = await this.prisma.rooms.findFirst({
-        where: {
-          pg_id: createRoomDto.pg_id,
-          room_no: createRoomDto.room_no,
-          is_deleted: true,
+    // Check if a soft-deleted room exists with the same pg_id and room_no
+    const existingDeletedRoom = await this.prisma.rooms.findFirst({
+      where: {
+        pg_id: createRoomDto.pg_id,
+        room_no: createRoomDto.room_no,
+        is_deleted: true,
+      },
+    });
+
+    let room;
+
+    if (existingDeletedRoom) {
+      // Restore the soft-deleted room by updating it
+      room = await this.prisma.rooms.update({
+        where: { s_no: existingDeletedRoom.s_no },
+        data: {
+          is_deleted: false,
+          images: createRoomDto.images,
+          updated_at: new Date(),
+        },
+        include: {
+          pg_locations: {
+            select: {
+              s_no: true,
+              location_name: true,
+            },
+          },
+          beds: {
+            where: {
+              is_deleted: false,
+            },
+            select: {
+              s_no: true,
+              bed_no: true,
+              bed_price: true,
+            },
+          },
         },
       });
 
-      let room;
+      return room;
+    } else {
+      // Create a new room
+      room = await this.prisma.rooms.create({
+        data: {
+          pg_id: createRoomDto.pg_id,
+          room_no: createRoomDto.room_no,
+          images: createRoomDto.images,
+        },
+        include: {
+          pg_locations: {
+            select: {
+              s_no: true,
+              location_name: true,
+            },
+          },
+          beds: {
+            where: {
+              is_deleted: false,
+            },
+            select: {
+              s_no: true,
+              bed_no: true,
+              bed_price: true,
+            },
+          },
+        },
+      });
 
-      if (existingDeletedRoom) {
-        // Restore the soft-deleted room by updating it
-        room = await this.prisma.rooms.update({
-          where: { s_no: existingDeletedRoom.s_no },
-          data: {
-            is_deleted: false,
-            images: createRoomDto.images,
-            updated_at: new Date(),
-          },
-          include: {
-            pg_locations: {
-              select: {
-                s_no: true,
-                location_name: true,
-              },
-            },
-            beds: {
-              where: {
-                is_deleted: false,
-              },
-              select: {
-                s_no: true,
-                bed_no: true,
-                bed_price: true,
-              },
-            },
-          },
-        });
-
-        return {
-          success: true,
-          message: 'Room restored successfully',
-          data: room,
-        };
-      } else {
-        // Create a new room
-        room = await this.prisma.rooms.create({
-          data: {
-            pg_id: createRoomDto.pg_id,
-            room_no: createRoomDto.room_no,
-            images: createRoomDto.images,
-          },
-          include: {
-            pg_locations: {
-              select: {
-                s_no: true,
-                location_name: true,
-              },
-            },
-            beds: {
-              where: {
-                is_deleted: false,
-              },
-              select: {
-                s_no: true,
-                bed_no: true,
-                bed_price: true,
-              },
-            },
-          },
-        });
-
-        return {
-          success: true,
-          message: 'Room created successfully',
-          data: room,
-        };
-      }
-    } catch (error) {
-      throw error;
+      return room;
     }
   }
 
@@ -160,17 +153,7 @@ export class RoomService {
       total_beds: room.beds.length,
     }));
 
-    return {
-      success: true,
-      data: roomsWithBedCount,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: skip + limit < total,
-      },
-    };
+    return ResponseUtil.paginated(roomsWithBedCount, total, page, limit, 'Rooms fetched successfully');
   }
 
   /**
@@ -211,12 +194,21 @@ export class RoomService {
     }
 
     return {
-      success: true,
-      data: {
-        ...room,
-        total_beds: room.beds.length,
-      },
+      ...room,
+      total_beds: room.beds.length,
     };
+  }
+
+  /**
+   * Extract S3 key from URL
+   */
+  private extractS3KeyFromUrl(url: string): string | null {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.pathname.substring(1); // Remove leading slash
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -233,6 +225,38 @@ export class RoomService {
 
     if (!existingRoom) {
       throw new NotFoundException(`Room with ID ${id} not found`);
+    }
+
+    // Handle S3 image deletion if images are being updated
+    if (updateRoomDto.images !== undefined) {
+      const oldImages = (Array.isArray(existingRoom.images) ? existingRoom.images : []) as string[];
+      const newImages = (Array.isArray(updateRoomDto.images) ? updateRoomDto.images : []) as string[];
+      
+      // Find images that were removed
+      const removedImages = oldImages.filter((oldUrl: string) => 
+        !newImages.includes(oldUrl) && oldUrl && oldUrl.includes('amazonaws.com')
+      );
+
+      // Delete removed images from S3 using S3Service
+      if (removedImages.length > 0) {
+        try {
+          const keysToDelete = removedImages
+            .map((imageUrl: string) => this.extractS3KeyFromUrl(imageUrl))
+            .filter((key: string | null): key is string => key !== null);
+
+          if (keysToDelete.length > 0) {
+            console.log('Deleting removed images from S3:', keysToDelete);
+            await this.s3Service.deleteMultipleFiles({
+              keys: keysToDelete,
+              bucket: process.env.AWS_S3_BUCKET_NAME || 'indianpgmanagement',
+            });
+            console.log('S3 images deleted successfully:', keysToDelete);
+          }
+        } catch (error) {
+          console.warn('Failed to delete S3 images:', error);
+          // Don't throw - continue with update even if S3 deletion fails
+        }
+      }
     }
 
     const room = await this.prisma.rooms.update({
@@ -261,11 +285,7 @@ export class RoomService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Room updated successfully',
-      data: room,
-    };
+    return room;
   }
 
   /**
@@ -311,9 +331,6 @@ export class RoomService {
       }),
     ]);
 
-    return {
-      success: true,
-      message: 'Room deleted successfully',
-    };
+    return ResponseUtil.noContent('Room deleted successfully');
   }
 }

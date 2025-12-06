@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateCurrentBillDto, UpdateCurrentBillDto } from './dto';
 import { Decimal } from '@prisma/client/runtime/library';
+import { ResponseUtil } from '../../../common/utils/response.util';
 
 @Injectable()
 export class CurrentBillService {
@@ -14,34 +15,27 @@ export class CurrentBillService {
    * 2. Individual bill for a tenant: Creates bill for a specific tenant
    */
   async create(createCurrentBillDto: CreateCurrentBillDto) {
-    try {
-      const { tenant_id, room_id, pg_id, bill_amount, bill_date, split_equally, remarks } = createCurrentBillDto;
+    const { tenant_id, room_id, pg_id, bill_amount, bill_date, split_equally, remarks } = createCurrentBillDto;
 
-      // Validate input
-      if (!bill_amount || bill_amount <= 0) {
-        throw new BadRequestException('Bill amount must be greater than 0');
-      }
-
-      // Mode 1: Split bill for a room
-      if (split_equally && room_id && !tenant_id) {
-        return this.createRoomBill(room_id, pg_id, bill_amount, bill_date, remarks);
-      }
-
-      // Mode 2: Individual bill for a tenant
-      if (tenant_id && !split_equally) {
-        return this.createIndividualBill(tenant_id, pg_id, bill_amount, bill_date, remarks);
-      }
-
-      // Invalid combination
-      throw new BadRequestException(
-        'Invalid parameters. Either provide room_id with split_equally=true for room bill, or tenant_id for individual bill'
-      );
-    } catch (error) {
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new BadRequestException(error.message || 'Failed to create current bill');
+    // Validate input
+    if (!bill_amount || bill_amount <= 0) {
+      throw new BadRequestException('Bill amount must be greater than 0');
     }
+
+    // Mode 1: Split bill for a room
+    if (split_equally && room_id && !tenant_id) {
+      return this.createRoomBill(room_id, pg_id, bill_amount, bill_date, remarks);
+    }
+
+    // Mode 2: Individual bill for a tenant
+    if (tenant_id && !split_equally) {
+      return this.createIndividualBill(tenant_id, pg_id, bill_amount, bill_date, remarks);
+    }
+
+    // Invalid combination
+    throw new BadRequestException(
+      'Invalid parameters. Either provide room_id with split_equally=true for room bill, or tenant_id for individual bill'
+    );
   }
 
   /**
@@ -78,99 +72,88 @@ export class CurrentBillService {
     bill_date?: string,
     remarks?: string
   ) {
-    try {
-      // Verify room exists
-      const room = await this.prisma.rooms.findFirst({
-        where: {
-          s_no: room_id,
-          is_deleted: false,
-        },
-      });
+    // Verify room exists
+    const room = await this.prisma.rooms.findFirst({
+      where: {
+        s_no: room_id,
+        is_deleted: false,
+      },
+    });
 
-      if (!room) {
-        throw new NotFoundException(`Room with ID ${room_id} not found`);
+    if (!room) {
+      throw new NotFoundException(`Room with ID ${room_id} not found`);
+    }
+
+    // Get all active tenants in this room
+    const tenants = await this.prisma.tenants.findMany({
+      where: {
+        room_id: room_id,
+        is_deleted: false,
+        status: 'ACTIVE',
+      },
+      select: {
+        s_no: true,
+        name: true,
+        tenant_id: true,
+      },
+    });
+
+    if (tenants.length === 0) {
+      throw new BadRequestException(`No active tenants found in room ${room_id}`);
+    }
+
+    // Calculate bill per tenant
+    const billPerTenant = new Decimal(total_bill_amount).dividedBy(new Decimal(tenants.length));
+
+    // Create bills for each tenant
+    const createdBills = [];
+    const billDateObj = bill_date ? new Date(bill_date) : new Date();
+
+    // Check if any tenant already has a bill for this month
+    for (const tenant of tenants) {
+      const billExists = await this.billExistsForMonth(tenant.s_no, billDateObj);
+      if (billExists) {
+        throw new BadRequestException(
+          `Room already has a bill for ${billDateObj.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}. Tenant ${tenant.name} already has a bill for this month.`
+        );
       }
+    }
 
-      // Get all active tenants in this room
-      const tenants = await this.prisma.tenants.findMany({
-        where: {
-          room_id: room_id,
-          is_deleted: false,
-          status: 'ACTIVE',
-        },
-        select: {
-          s_no: true,
-          name: true,
-          tenant_id: true,
-        },
-      });
-
-      if (tenants.length === 0) {
-        throw new BadRequestException(`No active tenants found in room ${room_id}`);
-      }
-
-      // Calculate bill per tenant
-      const billPerTenant = new Decimal(total_bill_amount).dividedBy(new Decimal(tenants.length));
-
-      // Create bills for each tenant
-      const createdBills = [];
-      const billDateObj = bill_date ? new Date(bill_date) : new Date();
-
-      // Check if any tenant already has a bill for this month
-      for (const tenant of tenants) {
-        const billExists = await this.billExistsForMonth(tenant.s_no, billDateObj);
-        if (billExists) {
-          throw new BadRequestException(
-            `Room already has a bill for ${billDateObj.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}. Tenant ${tenant.name} already has a bill for this month.`
-          );
-        }
-      }
-
-      for (const tenant of tenants) {
-        const currentBill = await this.prisma.current_bills.create({
-          data: {
-            tenant_id: tenant.s_no,
-            pg_id: pg_id,
-            bill_amount: billPerTenant,
-            bill_date: billDateObj,
-          },
-          include: {
-            tenants: {
-              select: {
-                s_no: true,
-                tenant_id: true,
-                name: true,
-              },
-            },
-            pg_locations: {
-              select: {
-                s_no: true,
-                location_name: true,
-              },
-            },
-          },
-        });
-
-        createdBills.push(currentBill);
-      }
-
-      return {
-        success: true,
-        message: `Current bill created and split equally among ${tenants.length} tenant(s)`,
+    for (const tenant of tenants) {
+      const currentBill = await this.prisma.current_bills.create({
         data: {
-          bills: createdBills,
-          total_bill_amount: total_bill_amount,
-          bill_per_tenant: billPerTenant.toNumber(),
-          tenant_count: tenants.length,
+          tenant_id: tenant.s_no,
+          pg_id: pg_id,
+          bill_amount: billPerTenant,
           bill_date: billDateObj,
         },
-      };
-    } catch (error) {
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
-        throw error;
-      }
-      throw new BadRequestException(error.message || 'Failed to create room bill');
+        include: {
+          tenants: {
+            select: {
+              s_no: true,
+              tenant_id: true,
+              name: true,
+            },
+          },
+          pg_locations: {
+            select: {
+              s_no: true,
+              location_name: true,
+            },
+          },
+        },
+      });
+
+      createdBills.push(currentBill);
     }
+
+    return ResponseUtil.success({
+      bills: createdBills,
+      total_bill_amount: total_bill_amount,
+      bill_per_tenant: billPerTenant.toNumber(),
+      tenant_count: tenants.length,
+      bill_date: billDateObj,
+    }, `Current bill created and split equally among ${tenants.length} tenant(s)`);
   }
 
   /**

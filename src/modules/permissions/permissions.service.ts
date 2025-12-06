@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePermissionDto, PermissionAction } from './dto/create-permission.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
 import { PermissionQueryDto } from './dto/permission-query.dto';
+import { ResponseUtil } from '../../common/utils/response.util';
 
 @Injectable()
 export class PermissionsService {
@@ -12,40 +13,29 @@ export class PermissionsService {
    * Create a new permission
    */
   async create(createPermissionDto: CreatePermissionDto) {
-    try {
-      // Check if permission already exists
-      const existingPermission = await this.prisma.permissions_master.findUnique({
-        where: {
-          screen_name_action: {
-            screen_name: createPermissionDto.screen_name,
-            action: createPermissionDto.action as any, // Cast to Prisma enum
-          },
-        },
-      });
-
-      if (existingPermission) {
-        throw new ConflictException('Permission with this screen and action already exists');
-      }
-
-      const permission = await this.prisma.permissions_master.create({
-        data: {
+    // Check if permission already exists
+    const existingPermission = await this.prisma.permissions_master.findUnique({
+      where: {
+        screen_name_action: {
           screen_name: createPermissionDto.screen_name,
           action: createPermissionDto.action as any, // Cast to Prisma enum
-          description: createPermissionDto.description,
         },
-      });
+      },
+    });
 
-      return {
-        success: true,
-        message: 'Permission created successfully',
-        data: permission,
-      };
-    } catch (error) {
-      if (error instanceof ConflictException) {
-        throw error;
-      }
-      throw new BadRequestException('Failed to create permission');
+    if (existingPermission) {
+      throw new ConflictException('Permission with this screen and action already exists');
     }
+
+    const permission = await this.prisma.permissions_master.create({
+      data: {
+        screen_name: createPermissionDto.screen_name,
+        action: createPermissionDto.action as any, // Cast to Prisma enum
+        description: createPermissionDto.description,
+      },
+    });
+
+    return permission;
   }
 
   /**
@@ -92,16 +82,7 @@ export class PermissionsService {
       this.prisma.permissions_master.count({ where }),
     ]);
 
-    return {
-      success: true,
-      data: permissions,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    return ResponseUtil.paginated(permissions, total, page, limit, 'Permissions fetched successfully');
   }
 
   /**
@@ -120,10 +101,7 @@ export class PermissionsService {
       },
     });
 
-    return {
-      success: true,
-      data: permissions,
-    };
+    return ResponseUtil.success(permissions, 'Permissions fetched successfully');
   }
 
   /**
@@ -138,10 +116,7 @@ export class PermissionsService {
       throw new NotFoundException('Permission not found');
     }
 
-    return {
-      success: true,
-      data: permission,
-    };
+    return permission;
   }
 
   /**
@@ -161,109 +136,85 @@ export class PermissionsService {
       throw new NotFoundException('Permission not found');
     }
 
-    return {
-      success: true,
-      data: permission,
-    };
+    return permission;
   }
 
   /**
    * Update permission
    */
   async update(id: number, updatePermissionDto: UpdatePermissionDto) {
-    try {
-      // Check if permission exists
-      const existingPermission = await this.prisma.permissions_master.findUnique({
-        where: { s_no: id },
-      });
+    // Check if permission exists
+    const existingPermission = await this.prisma.permissions_master.findUnique({
+      where: { s_no: id },
+    });
 
-      if (!existingPermission) {
-        throw new NotFoundException('Permission not found');
-      }
+    if (!existingPermission) {
+      throw new NotFoundException('Permission not found');
+    }
 
-      // Check if permission key already exists (if updating permission_key)
-      if (updatePermissionDto.screen_name && updatePermissionDto.action) {
-        const duplicatePermission = await this.prisma.permissions_master.findUnique({
-          where: {
-            screen_name_action: {
-              screen_name: updatePermissionDto.screen_name,
-              action: updatePermissionDto.action as any, // Cast to Prisma enum
-            },
+    // Check if permission key already exists (if updating permission_key)
+    if (updatePermissionDto.screen_name && updatePermissionDto.action) {
+      const duplicatePermission = await this.prisma.permissions_master.findUnique({
+        where: {
+          screen_name_action: {
+            screen_name: updatePermissionDto.screen_name,
+            action: updatePermissionDto.action as any, // Cast to Prisma enum
           },
-        });
-
-        if (duplicatePermission && duplicatePermission.s_no !== id) {
-          throw new ConflictException('Permission with this screen and action already exists');
-        }
-      }
-
-      const updatedPermission = await this.prisma.permissions_master.update({
-        where: { s_no: id },
-        data: {
-          ...(updatePermissionDto.screen_name && { screen_name: updatePermissionDto.screen_name }),
-          ...(updatePermissionDto.action && { action: updatePermissionDto.action as any }), // Cast to Prisma enum
-          ...(updatePermissionDto.description && { description: updatePermissionDto.description }),
         },
       });
 
-      return {
-        success: true,
-        message: 'Permission updated successfully',
-        data: updatedPermission,
-      };
-    } catch (error) {
-      if (error instanceof ConflictException || error instanceof NotFoundException) {
-        throw error;
+      if (duplicatePermission && duplicatePermission.s_no !== id) {
+        throw new ConflictException('Permission with this screen and action already exists');
       }
-      throw new BadRequestException('Failed to update permission');
     }
+
+    const updatedPermission = await this.prisma.permissions_master.update({
+      where: { s_no: id },
+      data: {
+        ...(updatePermissionDto.screen_name && { screen_name: updatePermissionDto.screen_name }),
+        ...(updatePermissionDto.action && { action: updatePermissionDto.action as any }), // Cast to Prisma enum
+        ...(updatePermissionDto.description && { description: updatePermissionDto.description }),
+      },
+    });
+
+    return updatedPermission;
   }
 
   /**
    * Delete permission
    */
   async remove(id: number) {
-    try {
-      const permission = await this.prisma.permissions_master.findUnique({
-        where: { s_no: id },
-      });
+    const permission = await this.prisma.permissions_master.findUnique({
+      where: { s_no: id },
+    });
 
-      if (!permission) {
-        throw new NotFoundException('Permission not found');
-      }
-
-      // Check if permission is being used in any roles
-      const permissionKey = `${permission.screen_name}_${permission.action.toLowerCase()}`;
-      const rolesUsingPermission = await this.prisma.roles.findMany({
-        where: {
-          permissions: {
-            path: permissionKey,
-            not: null,
-          },
-          is_deleted: false,
-        },
-      });
-
-      if (rolesUsingPermission.length > 0) {
-        throw new ConflictException(
-          `Cannot delete permission. It is being used by ${rolesUsingPermission.length} role(s)`
-        );
-      }
-
-      await this.prisma.permissions_master.delete({
-        where: { s_no: id },
-      });
-
-      return {
-        success: true,
-        message: 'Permission deleted successfully',
-      };
-    } catch (error) {
-      if (error instanceof ConflictException || error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new BadRequestException('Failed to delete permission');
+    if (!permission) {
+      throw new NotFoundException('Permission not found');
     }
+
+    // Check if permission is being used in any roles
+    const permissionKey = `${permission.screen_name}_${permission.action.toLowerCase()}`;
+    const rolesUsingPermission = await this.prisma.roles.findMany({
+      where: {
+        permissions: {
+          path: permissionKey,
+          not: null,
+        },
+        is_deleted: false,
+      },
+    });
+
+    if (rolesUsingPermission.length > 0) {
+      throw new ConflictException(
+        `Cannot delete permission. It is being used by ${rolesUsingPermission.length} role(s)`
+      );
+    }
+
+    await this.prisma.permissions_master.delete({
+      where: { s_no: id },
+    });
+
+    return ResponseUtil.noContent('Permission deleted successfully');
   }
 
   /**
@@ -288,53 +239,39 @@ export class PermissionsService {
       return acc;
     }, {} as Record<string, any[]>);
 
-    return {
-      success: true,
-      data: grouped,
-    };
+    return ResponseUtil.success(grouped, 'Permissions grouped successfully');
   }
 
   /**
    * Bulk create permissions
    */
   async bulkCreate(permissions: CreatePermissionDto[]) {
-    try {
-      // Check for duplicate permission keys
-      const existingPermissions = await this.prisma.permissions_master.findMany({
-        where: {
-          OR: permissions.map(p => ({
-            AND: [
-              { screen_name: p.screen_name },
-              { action: p.action as any }
-            ]
-          })),
-        },
-      });
-
-      if (existingPermissions.length > 0) {
-        const existingKeys = existingPermissions.map(p => `${p.screen_name}_${p.action}`);
-        throw new ConflictException(`Permissions already exist: ${existingKeys.join(', ')}`);
-      }
-
-      const createdPermissions = await this.prisma.permissions_master.createMany({
-        data: permissions.map(p => ({
-          screen_name: p.screen_name,
-          action: p.action as any, // Cast to Prisma enum
-          description: p.description,
+    // Check for duplicate permission keys
+    const existingPermissions = await this.prisma.permissions_master.findMany({
+      where: {
+        OR: permissions.map(p => ({
+          AND: [
+            { screen_name: p.screen_name },
+            { action: p.action as any }
+          ]
         })),
-        skipDuplicates: true,
-      });
+      },
+    });
 
-      return {
-        success: true,
-        message: `${createdPermissions.count} permissions created successfully`,
-        data: { count: createdPermissions.count },
-      };
-    } catch (error) {
-      if (error instanceof ConflictException) {
-        throw error;
-      }
-      throw new BadRequestException('Failed to create permissions');
+    if (existingPermissions.length > 0) {
+      const existingKeys = existingPermissions.map(p => `${p.screen_name}_${p.action}`);
+      throw new ConflictException(`Permissions already exist: ${existingKeys.join(', ')}`);
     }
+
+    const createdPermissions = await this.prisma.permissions_master.createMany({
+      data: permissions.map(p => ({
+        screen_name: p.screen_name,
+        action: p.action as any, // Cast to Prisma enum
+        description: p.description,
+      })),
+      skipDuplicates: true,
+    });
+
+    return ResponseUtil.success({ count: createdPermissions.count }, `${createdPermissions.count} permissions created successfully`);
   }
 }

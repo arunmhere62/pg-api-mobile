@@ -2,126 +2,112 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { CreateBedDto } from './dto/create-bed.dto';
 import { UpdateBedDto } from './dto/update-bed.dto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { S3Service } from '../../s3/s3.service';
+import { ResponseUtil } from '../../common/utils/response.util';
 
 @Injectable()
 export class BedService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private s3Service: S3Service,
+  ) {}
 
   /**
    * Create a new bed or restore soft-deleted bed
    */
   async create(createBedDto: CreateBedDto) {
-    try {
-      // Verify room exists
-      const room = await this.prisma.rooms.findFirst({
-        where: {
-          s_no: createBedDto.room_id,
-          is_deleted: false,
-        },
-      });
+    // Verify room exists
+    const room = await this.prisma.rooms.findFirst({
+      where: {
+        s_no: createBedDto.room_id,
+        is_deleted: false,
+      },
+    });
 
-      if (!room) {
-        throw new NotFoundException(`Room with ID ${createBedDto.room_id} not found`);
-      }
-
-      // Check if an active bed already exists with the same room_id and bed_no
-      const existingActiveBed = await this.prisma.beds.findFirst({
-        where: {
-          room_id: createBedDto.room_id,
-          bed_no: createBedDto.bed_no,
-          is_deleted: false,
-        },
-      });
-
-      if (existingActiveBed) {
-        throw new BadRequestException(
-          `Bed number "${createBedDto.bed_no}" already exists in this room. Please use a different bed number.`
-        );
-      }
-
-      // Check if a soft-deleted bed exists with the same room_id and bed_no
-      const existingDeletedBed = await this.prisma.beds.findFirst({
-        where: {
-          room_id: createBedDto.room_id,
-          bed_no: createBedDto.bed_no,
-          is_deleted: true,
-        },
-      });
-
-      let bed;
-
-      if (existingDeletedBed) {
-        // Restore the soft-deleted bed by updating it
-        bed = await this.prisma.beds.update({
-          where: { s_no: existingDeletedBed.s_no },
-          data: {
-            is_deleted: false,
-            pg_id: createBedDto.pg_id,
-            images: createBedDto.images,
-            bed_price: createBedDto.bed_price,
-            updated_at: new Date(),
-          },
-          include: {
-            rooms: {
-              select: {
-                s_no: true,
-                room_no: true,
-                pg_locations: {
-                  select: {
-                    s_no: true,
-                    location_name: true,
-                  },
-                },
-              },
-            },
-          },
-        });
-      } else {
-        // Create a new bed
-        bed = await this.prisma.beds.create({
-          data: {
-            room_id: createBedDto.room_id,
-            bed_no: createBedDto.bed_no,
-            pg_id: createBedDto.pg_id,
-            images: createBedDto.images,
-            bed_price: createBedDto.bed_price,
-          },
-          include: {
-            rooms: {
-              select: {
-                s_no: true,
-                room_no: true,
-                pg_locations: {
-                  select: {
-                    s_no: true,
-                    location_name: true,
-                  },
-                },
-              },
-            },
-          },
-        });
-      }
-
-      return {
-        success: true,
-        message: existingDeletedBed ? 'Bed restored successfully' : 'Bed created successfully',
-        data: bed,
-      };
-    } catch (error) {
-      // Re-throw known exceptions
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
-        throw error;
-      }
-      // Handle Prisma unique constraint errors
-      if (error.code === 'P2002') {
-        throw new BadRequestException(
-          `Bed number "${createBedDto.bed_no}" already exists in this room. Please use a different bed number.`
-        );
-      }
-      // Re-throw other errors
-      throw error;
+    if (!room) {
+      throw new NotFoundException(`Room with ID ${createBedDto.room_id} not found`);
     }
+
+    // Check if an active bed already exists with the same room_id and bed_no
+    const existingActiveBed = await this.prisma.beds.findFirst({
+      where: {
+        room_id: createBedDto.room_id,
+        bed_no: createBedDto.bed_no,
+        is_deleted: false,
+      },
+    });
+
+    if (existingActiveBed) {
+      throw new BadRequestException(
+        `Bed number "${createBedDto.bed_no}" already exists in this room. Please use a different bed number.`
+      );
+    }
+
+    // Check if a soft-deleted bed exists with the same room_id and bed_no
+    const existingDeletedBed = await this.prisma.beds.findFirst({
+      where: {
+        room_id: createBedDto.room_id,
+        bed_no: createBedDto.bed_no,
+        is_deleted: true,
+      },
+    });
+
+    let bed;
+
+    if (existingDeletedBed) {
+      // Restore the soft-deleted bed by updating it
+      bed = await this.prisma.beds.update({
+        where: { s_no: existingDeletedBed.s_no },
+        data: {
+          is_deleted: false,
+          pg_id: createBedDto.pg_id,
+          images: createBedDto.images,
+          bed_price: createBedDto.bed_price,
+          updated_at: new Date(),
+        },
+        include: {
+          rooms: {
+            select: {
+              s_no: true,
+              room_no: true,
+              pg_locations: {
+                select: {
+                  s_no: true,
+                  location_name: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    } else {
+      // Create a new bed
+      bed = await this.prisma.beds.create({
+        data: {
+          room_id: createBedDto.room_id,
+          bed_no: createBedDto.bed_no,
+          pg_id: createBedDto.pg_id,
+          images: createBedDto.images,
+          bed_price: createBedDto.bed_price,
+        },
+        include: {
+          rooms: {
+            select: {
+              s_no: true,
+              room_no: true,
+              pg_locations: {
+                select: {
+                  s_no: true,
+                  location_name: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+
+    return bed;
   }
 
   /**
@@ -213,17 +199,7 @@ export class BedService {
       is_occupied: bed.tenants && bed.tenants.length > 0,
     }));
 
-    return {
-      success: true,
-      data: bedsWithStatus,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: skip + limit < total,
-      },
-    };
+    return ResponseUtil.paginated(bedsWithStatus, total, page, limit, 'Beds fetched successfully');
   }
 
   /**
@@ -269,10 +245,7 @@ export class BedService {
       is_occupied: bed.tenants && bed.tenants.length > 0,
     }));
 
-    return {
-      success: true,
-      data: bedsWithStatus,
-    };
+    return ResponseUtil.success(bedsWithStatus, 'Beds fetched successfully');
   }
 
   /**
@@ -305,10 +278,19 @@ export class BedService {
       throw new NotFoundException(`Bed with ID ${id} not found`);
     }
 
-    return {
-      success: true,
-      data: bed,
-    };
+    return bed;
+  }
+
+  /**
+   * Extract S3 key from URL
+   */
+  private extractS3KeyFromUrl(url: string): string | null {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.pathname.substring(1); // Remove leading slash
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -338,6 +320,38 @@ export class BedService {
 
       if (!room) {
         throw new NotFoundException(`Room with ID ${updateBedDto.room_id} not found`);
+      }
+    }
+
+    // Handle S3 image deletion if images are being updated
+    if (updateBedDto.images !== undefined) {
+      const oldImages = (Array.isArray(existingBed.images) ? existingBed.images : []) as string[];
+      const newImages = (Array.isArray(updateBedDto.images) ? updateBedDto.images : []) as string[];
+      
+      // Find images that were removed
+      const removedImages = oldImages.filter((oldUrl: string) => 
+        !newImages.includes(oldUrl) && oldUrl && oldUrl.includes('amazonaws.com')
+      );
+
+      // Delete removed images from S3 using S3Service
+      if (removedImages.length > 0) {
+        try {
+          const keysToDelete = removedImages
+            .map((imageUrl: string) => this.extractS3KeyFromUrl(imageUrl))
+            .filter((key: string | null): key is string => key !== null);
+
+          if (keysToDelete.length > 0) {
+            console.log('Deleting removed images from S3:', keysToDelete);
+            await this.s3Service.deleteMultipleFiles({
+              keys: keysToDelete,
+              bucket: process.env.AWS_S3_BUCKET_NAME || 'indianpgmanagement',
+            });
+            console.log('S3 images deleted successfully:', keysToDelete);
+          }
+        } catch (error) {
+          console.warn('Failed to delete S3 images:', error);
+          // Don't throw - continue with update even if S3 deletion fails
+        }
       }
     }
 
@@ -408,9 +422,6 @@ export class BedService {
       data: { is_deleted: true },
     });
 
-    return {
-      success: true,
-      message: 'Bed deleted successfully',
-    };
+    return ResponseUtil.noContent('Bed deleted successfully');
   }
 }

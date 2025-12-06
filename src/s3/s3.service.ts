@@ -72,7 +72,24 @@ export class S3Service {
 
     console.log('Deleting from S3:', { bucket, key });
 
-    return this.s3Client.send(command);
+    try {
+      const response = await this.s3Client.send(command);
+      console.log('S3 delete response:', { 
+        DeleteMarker: response.DeleteMarker, 
+        VersionId: response.VersionId,
+        key 
+      });
+      return response;
+    } catch (error) {
+      console.error('S3 delete failed with error:', {
+        message: error.message,
+        code: error.code,
+        statusCode: error.$metadata?.httpStatusCode,
+        key,
+        bucket
+      });
+      throw error;
+    }
   }
 
   async deleteMultipleFiles(deleteData: {

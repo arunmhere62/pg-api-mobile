@@ -42,13 +42,21 @@ export class S3Controller {
     bucket: string;
   }) {
     try {
-      await this.s3Service.deleteFile(deleteData);
-      return { success: true };
+      console.log('Delete request received:', deleteData);
+      const response = await this.s3Service.deleteFile(deleteData);
+      console.log('Delete successful:', response);
+      return { success: true, response };
     } catch (error) {
-      console.error('S3 delete error:', error);
+      console.error('S3 delete error:', {
+        message: error.message,
+        code: error.code,
+        statusCode: error.$metadata?.httpStatusCode,
+        deleteData
+      });
       return {
         success: false,
         error: error.message || 'Delete failed',
+        code: error.code,
       };
     }
   }

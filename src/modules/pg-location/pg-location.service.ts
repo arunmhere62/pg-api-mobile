@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, ForbiddenException 
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePgLocationDto } from './dto/create-pg-location.dto';
 import { UpdatePgLocationDto } from './dto/update-pg-location.dto';
+import { ResponseUtil } from '../../common/utils/response.util';
 
 @Injectable()
 export class PgLocationService {
@@ -11,107 +12,86 @@ export class PgLocationService {
    * Get all PG locations for a user's organization
    */
   async findAll(userId: number, organizationId: number) {
-    try {
-      const pgLocations = await this.prisma.pg_locations.findMany({
-        where: {
-          organization_id: organizationId,
-          is_deleted: false,
-        },
-        select: {
-          s_no: true,
-          user_id: true,
-          location_name: true,
-          address: true,
-          pincode: true,
-          status: true,
-          images: true,
-          city_id: true,
-          state_id: true,
-          organization_id: true,
-          created_at: true,
-          updated_at: true,
-          city: {
-            select: {
-              s_no: true,
-              name: true,
-              state_code: true,
-            },
-          },
-          state: {
-            select: {
-              s_no: true,
-              name: true,
-              iso_code: true,
-            },
+    const pgLocations = await this.prisma.pg_locations.findMany({
+      where: {
+        organization_id: organizationId,
+        is_deleted: false,
+      },
+      select: {
+        s_no: true,
+        user_id: true,
+        location_name: true,
+        address: true,
+        pincode: true,
+        status: true,
+        images: true,
+        city_id: true,
+        state_id: true,
+        organization_id: true,
+        created_at: true,
+        updated_at: true,
+        city: {
+          select: {
+            s_no: true,
+            name: true,
+            state_code: true,
           },
         },
-        orderBy: {
-          created_at: 'desc',
+        state: {
+          select: {
+            s_no: true,
+            name: true,
+            iso_code: true,
+          },
         },
-      });
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
 
-      return {
-        success: true,
-        message: pgLocations.length > 0 
-          ? 'PG locations fetched successfully' 
-          : 'No PG locations found for this organization',
-        data: pgLocations, // Will be empty array [] if no locations found
-      };
-    } catch (error) {
-      throw new BadRequestException('Failed to fetch PG locations');
-    }
+    return ResponseUtil.success(pgLocations, 'PG locations fetched successfully');
   }
 
   /**
    * Get a single PG location by ID
    */
   async findOne(id: number, userId: number, organizationId: number) {
-    try {
-      const pgLocation = await this.prisma.pg_locations.findFirst({
-        where: {
-          s_no: id,
-          organization_id: organizationId,
-          is_deleted: false,
-        },
-        include: {
-          city: {
-            select: {
-              s_no: true,
-              name: true,
-              state_code: true,
-            },
-          },
-          state: {
-            select: {
-              s_no: true,
-              name: true,
-              iso_code: true,
-            },
-          },
-          organization: {
-            select: {
-              s_no: true,
-              name: true,
-            },
+    const pgLocation = await this.prisma.pg_locations.findFirst({
+      where: {
+        s_no: id,
+        organization_id: organizationId,
+        is_deleted: false,
+      },
+      include: {
+        city: {
+          select: {
+            s_no: true,
+            name: true,
+            state_code: true,
           },
         },
-      });
+        state: {
+          select: {
+            s_no: true,
+            name: true,
+            iso_code: true,
+          },
+        },
+        organization: {
+          select: {
+            s_no: true,
+            name: true,
+          },
+        },
+      },
+    });
 
-      if (!pgLocation) {
-        throw new NotFoundException('PG location not found');
-      }
-
-      return {
-        success: true,
-        message: 'PG location fetched successfully',
-        data: pgLocation,
-      };
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new BadRequestException('Failed to fetch PG location');
+    if (!pgLocation) {
+      throw new NotFoundException('PG location not found');
     }
+
+    return pgLocation;
   }
 
   /**

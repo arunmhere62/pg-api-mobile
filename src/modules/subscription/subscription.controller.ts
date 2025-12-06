@@ -2,6 +2,7 @@ import { Controller, Get, Post, Req, Body, UseGuards, Query } from '@nestjs/comm
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SubscriptionService } from './subscription.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ResponseUtil } from '../../common/utils/response.util';
 
 @ApiTags('Subscription')
 @Controller('subscription')
@@ -14,22 +15,10 @@ export class SubscriptionController {
   @Get('plans')
   @ApiOperation({ summary: 'Get all active subscription plans' })
   async getPlans() {
-    try {
-      console.log('📋 Fetching subscription plans...');
-      const plans = await this.subscriptionService.getActivePlans();
-      console.log(`✅ Found ${plans.length} active plans`);
-      return {
-        success: true,
-        plans,
-      };
-    } catch (error) {
-      console.error('❌ Error fetching plans:', error);
-      return {
-        success: false,
-        plans: [],
-        error: 'Failed to fetch subscription plans',
-      };
-    }
+    console.log('📋 Fetching subscription plans...');
+    const plans = await this.subscriptionService.getActivePlans();
+    console.log(`✅ Found ${plans.length} active plans`);
+    return ResponseUtil.success(plans, 'Subscription plans fetched successfully');
   }
 
   /**
@@ -47,10 +36,7 @@ export class SubscriptionController {
       organizationId,
     );
 
-    return {
-      success: true,
-      subscription,
-    };
+    return ResponseUtil.success(subscription, 'Current subscription fetched successfully');
   }
 
   /**
@@ -60,55 +46,11 @@ export class SubscriptionController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Check if user has active subscription' })
   async checkStatus(@Req() req: any) {
-    try {
-      const userId = parseInt(req.headers['x-user-id']) || req.user?.userId;
-      const organizationId = parseInt(req.headers['x-organization-id']) || req.user?.organizationId;
+    const userId = parseInt(req.headers['x-user-id']) || req.user?.userId;
+    const organizationId = parseInt(req.headers['x-organization-id']) || req.user?.organizationId;
 
-      if (!userId || !organizationId) {
-        console.log('⚠️ Missing user info - userId:', userId, 'orgId:', organizationId);
-        return {
-          success: true,
-          has_active_subscription: false,
-          subscription: null,
-          days_remaining: 0,
-        };
-      }
-
-      console.log('✅ Checking subscription for user:', userId, 'org:', organizationId);
-
-      const result = await this.subscriptionService.checkSubscriptionStatus(
-        userId,
-        organizationId,
-      );
-
-      // Normalize the response: rename subscription_plans to plan
-      let normalizedSubscription = null;
-      if (result.subscription) {
-        const { subscription_plans, ...rest } = result.subscription as any;
-        normalizedSubscription = {
-          ...rest,
-          plan: subscription_plans || null,
-        };
-      }
-
-      // Calculate days remaining
-      let daysRemaining = 0;
-      if (result.subscription && result.subscription.end_date) {
-        const endDate = new Date(result.subscription.end_date);
-        const now = new Date();
-        const diffTime = endDate.getTime() - now.getTime();
-        daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-      }
-
-      return {
-        success: true,
-        has_active_subscription: result.isActive,
-        subscription: normalizedSubscription,
-        days_remaining: daysRemaining,
-        is_trial: false, // Add trial logic if needed
-      };
-    } catch (error) {
-      console.error('❌ Error checking subscription status:', error);
+    if (!userId || !organizationId) {
+      console.log('⚠️ Missing user info - userId:', userId, 'orgId:', organizationId);
       return {
         success: true,
         has_active_subscription: false,
@@ -116,6 +58,40 @@ export class SubscriptionController {
         days_remaining: 0,
       };
     }
+
+    console.log('✅ Checking subscription for user:', userId, 'org:', organizationId);
+
+    const result = await this.subscriptionService.checkSubscriptionStatus(
+      userId,
+      organizationId,
+    );
+
+    // Normalize the response: rename subscription_plans to plan
+    let normalizedSubscription = null;
+    if (result.subscription) {
+      const { subscription_plans, ...rest } = result.subscription as any;
+      normalizedSubscription = {
+        ...rest,
+        plan: subscription_plans || null,
+      };
+    }
+
+    // Calculate days remaining
+    let daysRemaining = 0;
+    if (result.subscription && result.subscription.end_date) {
+      const endDate = new Date(result.subscription.end_date);
+      const now = new Date();
+      const diffTime = endDate.getTime() - now.getTime();
+      daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    }
+
+    return {
+      success: true,
+      has_active_subscription: result.isActive,
+      subscription: normalizedSubscription,
+      days_remaining: daysRemaining,
+      is_trial: false, // Add trial logic if needed
+    };
   }
 
   /**
@@ -198,22 +174,11 @@ export class SubscriptionController {
   @Post('payment/verify-manual')
   @ApiOperation({ summary: 'Manually verify and activate payment' })
   async verifyManualPayment(@Body() body: { order_id: string; upi_transaction_id?: string }) {
-    try {
-      const result = await this.subscriptionService.manuallyActivateSubscription(
-        body.order_id,
-        body.upi_transaction_id,
-      );
-      return {
-        success: true,
-        message: 'Subscription activated successfully',
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
+    const result = await this.subscriptionService.manuallyActivateSubscription(
+      body.order_id,
+      body.upi_transaction_id,
+    );
+    return ResponseUtil.success(result, 'Subscription activated successfully');
   }
 
   /**

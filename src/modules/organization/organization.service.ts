@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ResponseUtil } from '../../common/utils/response.util';
 
 interface GetOrganizationsParams {
   page: number;
@@ -136,17 +137,7 @@ export class OrganizationService {
       })
     );
 
-    return {
-      success: true,
-      data: transformedOrganizations,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: skip + limit < total,
-      },
-    };
+    return ResponseUtil.paginated(transformedOrganizations, total, page, limit, 'Organizations fetched successfully');
   }
 
   /**
@@ -212,19 +203,16 @@ export class OrganizationService {
       },
     });
 
-    return {
-      success: true,
-      data: {
-        totalOrganizations,
-        activeOrganizations,
-        inactiveOrganizations: totalOrganizations - activeOrganizations,
-        totalUsers,
-        totalPGLocations,
-        totalTenants,
-        totalRevenue: Number(totalRevenue),
-        recentOrganizations,
-      },
-    };
+    return ResponseUtil.success({
+      totalOrganizations,
+      activeOrganizations,
+      inactiveOrganizations: totalOrganizations - activeOrganizations,
+      totalUsers,
+      totalPGLocations,
+      totalTenants,
+      totalRevenue: Number(totalRevenue),
+      recentOrganizations,
+    }, 'Organization statistics fetched successfully');
   }
 
   /**
@@ -316,23 +304,20 @@ export class OrganizationService {
       created_at: user.created_at,
     }));
 
-    return {
-      success: true,
-      data: {
-        s_no: organization.s_no,
-        name: organization.name,
-        description: organization.description,
-        created_at: organization.created_at,
-        updated_at: organization.updated_at,
-        users: transformedUsers,
-        pg_locations: organization.pg_locations,
-        statistics: {
-          totalUsers: transformedUsers.length,
-          totalPGLocations: organization.pg_locations.length,
-          totalTenants: tenantCount,
-          totalRevenue: Number(totalRevenue),
-        },
+    return ResponseUtil.success({
+      s_no: organization.s_no,
+      name: organization.name,
+      description: organization.description,
+      created_at: organization.created_at,
+      updated_at: organization.updated_at,
+      users: transformedUsers,
+      pg_locations: organization.pg_locations,
+      statistics: {
+        totalUsers: transformedUsers.length,
+        totalPGLocations: organization.pg_locations.length,
+        totalTenants: tenantCount,
+        totalRevenue: Number(totalRevenue),
       },
-    };
+    }, 'Organization details fetched successfully');
   }
 }

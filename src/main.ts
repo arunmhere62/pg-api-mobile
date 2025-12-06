@@ -3,13 +3,15 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import * as bodyParser from 'body-parser';
+import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 // import { RateLimitInterceptor } from './common/interceptors/rate-limit.interceptor';
 // import { PerformanceInterceptor } from './common/interceptors/performance.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Increase payload size limit for image uploads (50MB)
+  // Payload size limit for image uploads (50MB - images are compressed on frontend)
   app.use(bodyParser.json({ limit: '50mb' }));
   app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
@@ -33,6 +35,12 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+
+  // Global exception filter - handles all errors consistently
+  app.useGlobalFilters(new GlobalExceptionFilter());
+
+  // Global response interceptor - wraps all successful responses
+  app.useGlobalInterceptors(new TransformInterceptor());
 
   // Add performance interceptors (temporarily disabled)
   // app.useGlobalInterceptors(new PerformanceInterceptor());
