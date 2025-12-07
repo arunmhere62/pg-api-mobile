@@ -35,21 +35,18 @@ export class SubscriptionService {
    * Test CCAvenue configuration (for debugging)
    */
   async testCCAvenueConfig() {
-    return {
-      success: true,
-      config: {
-        merchantId: this.CCAVENUE_MERCHANT_ID,
-        merchantIdLength: this.CCAVENUE_MERCHANT_ID?.length,
-        hasAccessCode: !!this.CCAVENUE_ACCESS_CODE,
-        accessCodeLength: this.CCAVENUE_ACCESS_CODE?.length,
-        hasWorkingKey: !!this.CCAVENUE_WORKING_KEY,
-        workingKeyLength: this.CCAVENUE_WORKING_KEY?.length,
-        paymentUrl: this.CCAVENUE_PAYMENT_URL,
-        redirectUrl: this.CCAVENUE_REDIRECT_URL,
-        cancelUrl: this.CCAVENUE_CANCEL_URL,
-      },
+    return ResponseUtil.success({
+      merchantId: this.CCAVENUE_MERCHANT_ID,
+      merchantIdLength: this.CCAVENUE_MERCHANT_ID?.length,
+      hasAccessCode: !!this.CCAVENUE_ACCESS_CODE,
+      accessCodeLength: this.CCAVENUE_ACCESS_CODE?.length,
+      hasWorkingKey: !!this.CCAVENUE_WORKING_KEY,
+      workingKeyLength: this.CCAVENUE_WORKING_KEY?.length,
+      paymentUrl: this.CCAVENUE_PAYMENT_URL,
+      redirectUrl: this.CCAVENUE_REDIRECT_URL,
+      cancelUrl: this.CCAVENUE_CANCEL_URL,
       note: 'Check if Merchant ID should be 176853 (6 digits) not 1769853 (7 digits)',
-    };
+    }, 'CCAvenue configuration test');
   }
 
   /**
@@ -73,7 +70,7 @@ export class SubscriptionService {
       },
     });
 
-    return plans;
+    return ResponseUtil.success(plans, 'Subscription plans fetched successfully');
   }
 
   /**
@@ -95,7 +92,7 @@ export class SubscriptionService {
       },
     });
 
-    return subscription;
+    return ResponseUtil.success(subscription, 'Current subscription fetched successfully');
   }
 
   /**
@@ -104,10 +101,10 @@ export class SubscriptionService {
   async checkSubscriptionStatus(userId: number, organizationId: number) {
     const subscription = await this.getCurrentSubscription(userId, organizationId);
     
-    return {
+    return ResponseUtil.success({
       isActive: !!subscription,
       subscription: subscription || null,
-    };
+    }, 'Subscription status checked successfully');
   }
 
   /**
@@ -125,7 +122,7 @@ export class SubscriptionService {
       throw new NotFoundException('Subscription not found');
     }
 
-    return subscription;
+    return ResponseUtil.success(subscription, 'Subscription fetched successfully');
   }
 
   /**
@@ -164,16 +161,7 @@ export class SubscriptionService {
 
     const totalPages = Math.ceil(total / limit);
 
-    return {
-      data: subscriptions,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasMore: page < totalPages,
-      },
-    };
+    return ResponseUtil.paginated(subscriptions, total, page, limit, 'User subscriptions fetched successfully');
   }
 
   /**
@@ -286,11 +274,11 @@ export class SubscriptionService {
       paymentUrlLength: paymentUrl.length 
     });
 
-    return {
+    return ResponseUtil.success({
       subscription,
       payment_url: paymentUrl,
       order_id: orderId,
-    };
+    }, 'Subscription initiated successfully');
   }
 
   /**
@@ -381,12 +369,11 @@ export class SubscriptionService {
 
     console.log('🎉 Subscription activated:', updatedSubscription.s_no);
 
-    return {
+    return ResponseUtil.success({
       subscription: updatedSubscription,
       orderId,
       upiTransactionId,
-      message: 'Subscription activated successfully',
-    };
+    }, 'Subscription activated successfully');
   }
 
   /**
@@ -456,12 +443,11 @@ export class SubscriptionService {
         console.log('✅ Subscription activated:', payment.subscription_id);
       }
 
-      return {
-        success: orderStatus === 'Success',
+      return ResponseUtil.success({
         orderId,
         trackingId,
         message: statusMessage,
-      };
+      }, orderStatus === 'Success' ? 'Payment successful' : 'Payment failed');
     } catch (error) {
       console.error('❌ Payment callback processing error:', error);
       throw error;

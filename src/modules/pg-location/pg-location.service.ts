@@ -115,7 +115,7 @@ export class PgLocationService {
       throw new NotFoundException('PG location not found');
     }
 
-    return pgLocation;
+    return ResponseUtil.success(pgLocation, 'PG location fetched successfully');
   }
 
   /**
@@ -173,11 +173,7 @@ export class PgLocationService {
         },
       });
 
-      return {
-        success: true,
-        message: 'PG location created successfully',
-        data: newPgLocation,
-      };
+      return ResponseUtil.success(newPgLocation, 'PG location created successfully');
     } catch (error) {
       console.error('Create PG location error:', error);
       throw new BadRequestException('Failed to create PG location');
@@ -322,10 +318,7 @@ export class PgLocationService {
         },
       });
 
-      return {
-        success: true,
-        message: 'PG location deleted successfully',
-      };
+      return ResponseUtil.success(null, 'PG location deleted successfully');
     } catch (error) {
       console.error('Delete PG location error:', error);
       throw new BadRequestException('Failed to delete PG location');
@@ -360,15 +353,11 @@ export class PgLocationService {
         }),
       ]);
 
-      return {
-        success: true,
-        message: 'PG location stats fetched successfully',
-        data: {
-          total,
-          active,
-          inactive,
-        },
-      };
+      return ResponseUtil.success({
+        total,
+        active,
+        inactive,
+      }, 'PG location stats fetched successfully');
     } catch (error) {
       throw new BadRequestException('Failed to fetch PG location stats');
     }
@@ -477,40 +466,36 @@ export class PgLocationService {
       const roomOccupancyRate = totalRooms > 0 ? ((occupiedRooms / totalRooms) * 100).toFixed(1) : '0.0';
       const bedOccupancyRate = totalBeds > 0 ? ((occupiedBeds / totalBeds) * 100).toFixed(1) : '0.0';
 
-      return {
-        success: true,
-        message: 'PG location summary fetched successfully',
-        data: {
-          pgLocation: {
-            id: pgLocation.s_no,
-            name: pgLocation.location_name,
-            address: pgLocation.address,
-            status: pgLocation.status,
-          },
-          rooms: {
-            total: totalRooms,
-            occupied: occupiedRooms,
-            vacant: vacantRooms,
-            maintenance: maintenanceRooms,
-            occupancyRate: parseFloat(roomOccupancyRate),
-          },
-          beds: {
-            total: totalBeds,
-            occupied: occupiedBeds,
-            vacant: vacantBeds,
-            maintenance: maintenanceBeds,
-            occupancyRate: parseFloat(bedOccupancyRate),
-          },
-          tenants: {
-            total: totalTenants,
-            active: activeTenants,
-            inactive: inactiveTenants,
-          },
-          employees: {
-            total: employeeStats,
-          },
+      return ResponseUtil.success({
+        pgLocation: {
+          id: pgLocation.s_no,
+          name: pgLocation.location_name,
+          address: pgLocation.address,
+          status: pgLocation.status,
         },
-      };
+        rooms: {
+          total: totalRooms,
+          occupied: occupiedRooms,
+          vacant: vacantRooms,
+          maintenance: maintenanceRooms,
+          occupancyRate: parseFloat(roomOccupancyRate),
+        },
+        beds: {
+          total: totalBeds,
+          occupied: occupiedBeds,
+          vacant: vacantBeds,
+          maintenance: maintenanceBeds,
+          occupancyRate: parseFloat(bedOccupancyRate),
+        },
+        tenants: {
+          total: totalTenants,
+          active: activeTenants,
+          inactive: inactiveTenants,
+        },
+        employees: {
+          total: employeeStats,
+        },
+      }, 'PG location summary fetched successfully');
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -688,21 +673,17 @@ export class PgLocationService {
         { revenue: 0, expenses: 0, profit: 0 }
       );
 
-      return {
-        success: true,
-        message: 'Financial analytics fetched successfully',
-        data: {
-          pgLocation: {
-            id: pgLocation.s_no,
-            name: pgLocation.location_name,
-          },
-          monthlyData,
-          totals: {
-            ...totals,
-            profitPercentage: totals.revenue > 0 ? ((totals.profit / totals.revenue) * 100).toFixed(2) : '0.00',
-          },
+      return ResponseUtil.success({
+        pgLocation: {
+          id: pgLocation.s_no,
+          name: pgLocation.location_name,
         },
-      };
+        monthlyData,
+        totals: {
+          ...totals,
+          profitPercentage: totals.revenue > 0 ? ((totals.profit / totals.revenue) * 100).toFixed(2) : '0.00',
+        },
+      }, 'Financial analytics fetched successfully');
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -914,11 +895,7 @@ export class PgLocationService {
         }
       }
 
-      return {
-        success: true,
-        message: 'Tenant rent payment status fetched successfully',
-        data: tenantsWithPaymentIssues,
-      };
+      return ResponseUtil.success(tenantsWithPaymentIssues, 'Tenant rent payment status fetched successfully');
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;

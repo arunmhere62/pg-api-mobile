@@ -67,7 +67,7 @@ export class EmployeeService {
     // Remove password from response
     const { password, ...employeeWithoutPassword } = employee;
 
-    return employeeWithoutPassword;
+    return ResponseUtil.success(employeeWithoutPassword, 'Employee created successfully');
   }
 
   /**
@@ -209,7 +209,7 @@ export class EmployeeService {
       throw new NotFoundException('Employee not found');
     }
 
-    return employee;
+    return ResponseUtil.success(employee, 'Employee fetched successfully');
   }
 
   /**
@@ -285,7 +285,7 @@ export class EmployeeService {
       },
     });
 
-    return employee;
+    return ResponseUtil.success(employee, 'Employee updated successfully');
   }
 
   /**

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ResponseUtil } from '../../common/utils/response.util';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { UpdateExpenseDto } from './dto/update-expense.dto';
 
@@ -24,11 +25,7 @@ export class ExpenseService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Expense created successfully',
-      data: expense,
-    };
+    return ResponseUtil.success(expense, 'Expense created successfully');
   }
 
   /**
@@ -75,17 +72,7 @@ export class ExpenseService {
       }),
     ]);
 
-    return {
-      success: true,
-      data: expenses,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: page < Math.ceil(total / limit),
-      },
-    };
+    return ResponseUtil.paginated(expenses, total, page, limit, 'Expenses fetched successfully');
   }
 
   /**
@@ -110,10 +97,7 @@ export class ExpenseService {
       throw new NotFoundException('Expense not found');
     }
 
-    return {
-      success: true,
-      data: expense,
-    };
+    return ResponseUtil.success(expense, 'Expense fetched successfully');
   }
 
   /**
@@ -146,11 +130,7 @@ export class ExpenseService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Expense updated successfully',
-      data: expense,
-    };
+    return ResponseUtil.success(expense, 'Expense updated successfully');
   }
 
   /**
@@ -176,10 +156,7 @@ export class ExpenseService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Expense deleted successfully',
-    };
+    return ResponseUtil.noContent('Expense deleted successfully');
   }
 
   /**
@@ -216,13 +193,10 @@ export class ExpenseService {
       }),
     ]);
 
-    return {
-      success: true,
-      data: {
-        totalAmount: totalExpenses._sum.amount || 0,
-        totalCount: totalExpenses._count,
-        byType: expensesByType,
-      },
-    };
+    return ResponseUtil.success({
+      totalAmount: totalExpenses._sum.amount || 0,
+      totalCount: totalExpenses._count,
+      byType: expensesByType,
+    }, 'Expense statistics fetched successfully');
   }
 }

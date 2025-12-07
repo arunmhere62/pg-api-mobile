@@ -214,11 +214,7 @@ export class CurrentBillService {
         },
       });
 
-      return {
-        success: true,
-        message: 'Current bill created successfully for tenant',
-        data: currentBill,
-      };
+      return ResponseUtil.success(currentBill, 'Current bill created successfully for tenant');
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof BadRequestException) {
         throw error;
@@ -298,16 +294,7 @@ export class CurrentBillService {
         this.prisma.current_bills.count({ where }),
       ]);
 
-      return {
-        success: true,
-        data: bills,
-        pagination: {
-          total,
-          page,
-          limit,
-          pages: Math.ceil(total / limit),
-        },
-      };
+      return ResponseUtil.paginated(bills, total, page, limit, 'Current bills fetched successfully');
     } catch (error) {
       throw new BadRequestException(error.message || 'Failed to fetch current bills');
     }
@@ -347,10 +334,7 @@ export class CurrentBillService {
         throw new NotFoundException(`Current bill with ID ${id} not found`);
       }
 
-      return {
-        success: true,
-        data: bill,
-      };
+      return ResponseUtil.success(bill, 'Current bill fetched successfully');
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -416,11 +400,7 @@ export class CurrentBillService {
         },
       });
 
-      return {
-        success: true,
-        message: 'Current bill updated successfully',
-        data: bill,
-      };
+      return ResponseUtil.success(bill, 'Current bill updated successfully');
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof BadRequestException) {
         throw error;
@@ -453,10 +433,7 @@ export class CurrentBillService {
         },
       });
 
-      return {
-        success: true,
-        message: 'Current bill deleted successfully',
-      };
+      return ResponseUtil.noContent('Current bill deleted successfully');
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -511,16 +488,15 @@ export class CurrentBillService {
 
       const totalAmount = bills.reduce((sum, bill) => sum + parseFloat(bill.bill_amount.toString()), 0);
 
-      return {
-        success: true,
-        data: bills,
+      return ResponseUtil.success({
+        bills,
         summary: {
           month,
           year,
           total_bills: bills.length,
           total_amount: totalAmount,
         },
-      };
+      }, 'Bills fetched successfully for the month');
     } catch (error) {
       throw new BadRequestException(error.message || 'Failed to fetch bills for the month');
     }

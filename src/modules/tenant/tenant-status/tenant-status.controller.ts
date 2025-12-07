@@ -4,11 +4,11 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { HeadersValidationGuard } from '../../../common/guards/headers-validation.guard';
+import { RequireHeaders } from '../../../common/decorators/require-headers.decorator';
+import { ValidatedHeaders } from '../../../common/decorators/validated-headers.decorator';
 import { TenantStatusService } from './tenant-status.service';
-import { PrismaService } from '../../prisma/prisma.service';
-import { HeadersValidationGuard } from '../../common/guards/headers-validation.guard';
-import { RequireHeaders } from '../../common/decorators/require-headers.decorator';
-import { ValidatedHeaders } from '../../common/decorators/validated-headers.decorator';
 
 @Controller('tenant-status')
 @UseGuards(HeadersValidationGuard)

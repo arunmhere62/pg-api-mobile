@@ -35,7 +35,7 @@ export class PermissionsService {
       },
     });
 
-    return permission;
+    return ResponseUtil.success(permission, 'Permission created successfully');
   }
 
   /**
@@ -116,7 +116,7 @@ export class PermissionsService {
       throw new NotFoundException('Permission not found');
     }
 
-    return permission;
+    return ResponseUtil.success(permission, 'Permission fetched successfully');
   }
 
   /**
@@ -136,7 +136,7 @@ export class PermissionsService {
       throw new NotFoundException('Permission not found');
     }
 
-    return permission;
+    return ResponseUtil.success(permission, 'Permission fetched successfully');
   }
 
   /**
@@ -177,7 +177,7 @@ export class PermissionsService {
       },
     });
 
-    return updatedPermission;
+    return ResponseUtil.success(updatedPermission, 'Permission updated successfully');
   }
 
   /**

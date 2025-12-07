@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ResponseUtil } from '../../common/utils/response.util';
 import { CCAvenuePaymentResponse } from './ccavenue.service';
 
 export interface CreatePaymentRecordDto {
@@ -52,7 +53,7 @@ export class PaymentGatewayService {
     });
 
     this.logger.log(`Subscription payment record created: ${paymentRecord.s_no}`);
-    return paymentRecord;
+    return ResponseUtil.success(paymentRecord, 'Payment record created successfully');
   }
 
   /**
@@ -96,7 +97,7 @@ export class PaymentGatewayService {
       throw new NotFoundException(`Payment with order ID ${orderId} not found`);
     }
 
-    return payment;
+    return ResponseUtil.success(payment, 'Payment fetched successfully');
   }
 
   /**
@@ -147,7 +148,7 @@ export class PaymentGatewayService {
       this.logger.log(`Subscription activated for user ${payment.user_id} until ${endDate.toISOString()}`);
       this.logger.log(`Successfully processed payment for order: ${paymentResponse.orderId}`);
 
-      return subscription;
+      return ResponseUtil.success(subscription, 'Payment processed successfully');
     } catch (error) {
       this.logger.error(`Failed to process payment for order: ${paymentResponse.orderId}`, error);
       throw error;
@@ -174,7 +175,7 @@ export class PaymentGatewayService {
       },
     });
 
-    return subscription;
+    return ResponseUtil.success(subscription, 'Active subscription fetched successfully');
   }
 
   /**
@@ -191,7 +192,7 @@ export class PaymentGatewayService {
   async getPaymentStatus(orderId: string) {
     const payment = await this.getPaymentByOrderId(orderId);
 
-    return {
+    return ResponseUtil.success({
       orderId: payment.order_id,
       amount: payment.amount,
       currency: payment.currency,
@@ -202,6 +203,6 @@ export class PaymentGatewayService {
       statusMessage: payment.status_message,
       createdAt: payment.created_at,
       updatedAt: payment.updated_at,
-    };
+    }, 'Payment status fetched successfully');
   }
 }

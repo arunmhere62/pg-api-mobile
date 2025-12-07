@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { TenantStatusService } from './tenant-status.service';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { ResponseUtil } from '../../../common/utils/response.util';
+import { TenantStatusService } from '../tenant-status/tenant-status.service';
 
 export interface PendingPaymentDetails {
   tenant_id: number;

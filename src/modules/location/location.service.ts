@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ResponseUtil } from '../../common/utils/response.util';
 
 @Injectable()
 export class LocationService {
@@ -26,11 +27,7 @@ export class LocationService {
         },
       });
 
-      return {
-        success: true,
-        message: 'Countries fetched successfully',
-        data: countries,
-      };
+      return ResponseUtil.success(countries, 'Countries fetched successfully');
     } catch (error) {
       throw new BadRequestException('Failed to fetch countries');
     }
@@ -62,11 +59,7 @@ export class LocationService {
         },
       });
 
-      return {
-        success: true,
-        message: 'States fetched successfully',
-        data: states,
-      };
+      return ResponseUtil.success(states, 'States fetched successfully');
     } catch (error) {
       throw new BadRequestException('Failed to fetch states');
     }
@@ -98,11 +91,7 @@ export class LocationService {
         },
       });
 
-      return {
-        success: true,
-        message: 'Cities fetched successfully',
-        data: cities,
-      };
+      return ResponseUtil.success(cities, 'Cities fetched successfully');
     } catch (error) {
       throw new BadRequestException('Failed to fetch cities');
     }
@@ -137,11 +126,7 @@ export class LocationService {
         throw new BadRequestException('Country not found');
       }
 
-      return {
-        success: true,
-        message: 'Country fetched successfully',
-        data: country,
-      };
+      return ResponseUtil.success(country, 'Country fetched successfully');
     } catch (error) {
       throw new BadRequestException('Failed to fetch country');
     }
@@ -180,11 +165,7 @@ export class LocationService {
         throw new BadRequestException('State not found');
       }
 
-      return {
-        success: true,
-        message: 'State fetched successfully',
-        data: state,
-      };
+      return ResponseUtil.success(state, 'State fetched successfully');
     } catch (error) {
       throw new BadRequestException('Failed to fetch state');
     }
@@ -217,11 +198,7 @@ export class LocationService {
         throw new BadRequestException('City not found');
       }
 
-      return {
-        success: true,
-        message: 'City fetched successfully',
-        data: city,
-      };
+      return ResponseUtil.success(city, 'City fetched successfully');
     } catch (error) {
       throw new BadRequestException('Failed to fetch city');
     }

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { ResponseUtil } from '../../../common/utils/response.util';
 import { CheckoutTenantDto } from './dto/checkout-tenant.dto';
 import { UpdateCheckoutDateDto } from '../dto/update-checkout-date.dto';
 
@@ -147,11 +148,7 @@ export class CheckoutService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Tenant checked out successfully',
-      data: updatedTenant,
-    };
+    return ResponseUtil.success(updatedTenant, 'Tenant checked out successfully');
   }
 
   /**
@@ -240,10 +237,6 @@ export class CheckoutService {
       ? 'Checkout cleared and tenant reactivated successfully'
       : 'Checkout date updated successfully';
 
-    return {
-      success: true,
-      message,
-      data: updatedTenant,
-    };
+    return ResponseUtil.success(updatedTenant, message);
   }
 }

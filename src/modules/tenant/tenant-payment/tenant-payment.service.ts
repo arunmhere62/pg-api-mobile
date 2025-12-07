@@ -99,7 +99,7 @@ export class TenantPaymentService {
       },
     });
 
-    return payment;
+    return ResponseUtil.success(payment, 'Tenant payment created successfully');
   }
 
   async findAll(
@@ -285,7 +285,7 @@ export class TenantPaymentService {
       throw new NotFoundException(`Tenant payment with ID ${id} not found`);
     }
 
-    return payment;
+    return ResponseUtil.success(payment, 'Tenant payment fetched successfully');
   }
 
   async update(id: number, updateTenantPaymentDto: UpdateTenantPaymentDto) {
@@ -391,7 +391,7 @@ export class TenantPaymentService {
       },
     });
 
-    return payment;
+    return ResponseUtil.success(payment, 'Tenant payment updated successfully');
   }
 
   async remove(id: number) {

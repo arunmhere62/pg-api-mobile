@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ResponseUtil } from '../../common/utils/response.util';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { AddCommentDto } from './dto/add-comment.dto';
@@ -48,11 +49,7 @@ export class TicketService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Ticket created successfully',
-      data: ticket,
-    };
+    return ResponseUtil.success(ticket, 'Ticket created successfully');
   }
 
   async findAll(
@@ -135,22 +132,16 @@ export class TicketService {
       this.prisma.issue_tickets.count({ where }),
     ]);
 
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-      success: true,
-      data: tickets.map(ticket => ({
+    return ResponseUtil.paginated(
+      tickets.map(ticket => ({
         ...ticket,
         attachments: ticket.attachments ? JSON.parse(ticket.attachments as string) : [],
       })),
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasMore: page < totalPages,
-      },
-    };
+      total,
+      page,
+      limit,
+      'Tickets fetched successfully'
+    );
   }
 
   async findOne(id: number, userId?: number) {
@@ -199,17 +190,14 @@ export class TicketService {
       throw new NotFoundException('Ticket not found');
     }
 
-    return {
-      success: true,
-      data: {
-        ...ticket,
-        attachments: ticket.attachments ? JSON.parse(ticket.attachments as string) : [],
-        issue_ticket_comments: ticket.issue_ticket_comments.map(comment => ({
-          ...comment,
-          attachments: comment.attachments ? JSON.parse(comment.attachments as string) : [],
-        })),
-      },
-    };
+    return ResponseUtil.success({
+      ...ticket,
+      attachments: ticket.attachments ? JSON.parse(ticket.attachments as string) : [],
+      issue_ticket_comments: ticket.issue_ticket_comments.map(comment => ({
+        ...comment,
+        attachments: comment.attachments ? JSON.parse(comment.attachments as string) : [],
+      })),
+    }, 'Ticket fetched successfully');
   }
 
   async update(id: number, updateDto: UpdateTicketDto, userId: number, isSuperAdmin: boolean) {
@@ -290,14 +278,10 @@ export class TicketService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Ticket updated successfully',
-      data: {
-        ...updated,
-        attachments: updated.attachments ? JSON.parse(updated.attachments as string) : [],
-      },
-    };
+    return ResponseUtil.success({
+      ...updated,
+      attachments: updated.attachments ? JSON.parse(updated.attachments as string) : [],
+    }, 'Ticket updated successfully');
   }
 
   async remove(id: number, userId: number, isSuperAdmin: boolean) {
@@ -338,10 +322,7 @@ export class TicketService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Ticket deleted successfully',
-    };
+    return ResponseUtil.noContent('Ticket deleted successfully');
   }
 
   async addComment(ticketId: number, commentDto: AddCommentDto, userId: number) {
@@ -381,14 +362,10 @@ export class TicketService {
       data: { updated_at: new Date().toISOString() },
     });
 
-    return {
-      success: true,
-      message: 'Comment added successfully',
-      data: {
-        ...comment,
-        attachments: comment.attachments ? JSON.parse(comment.attachments as string) : [],
-      },
-    };
+    return ResponseUtil.success({
+      ...comment,
+      attachments: comment.attachments ? JSON.parse(comment.attachments as string) : [],
+    }, 'Comment added successfully');
   }
 
   async getStats(organizationId?: number) {
@@ -418,25 +395,22 @@ export class TicketService {
       }),
     ]);
 
-    return {
-      success: true,
-      data: {
-        total,
-        byStatus: {
-          open,
-          inProgress,
-          resolved,
-          closed,
-        },
-        byCategory: byCategory.reduce((acc, item) => {
-          acc[item.category] = item._count;
-          return acc;
-        }, {}),
-        byPriority: byPriority.reduce((acc, item) => {
-          acc[item.priority] = item._count;
-          return acc;
-        }, {}),
+    return ResponseUtil.success({
+      total,
+      byStatus: {
+        open,
+        inProgress,
+        resolved,
+        closed,
       },
-    };
+      byCategory: byCategory.reduce((acc, item) => {
+        acc[item.category] = item._count;
+        return acc;
+      }, {}),
+      byPriority: byPriority.reduce((acc, item) => {
+        acc[item.priority] = item._count;
+        return acc;
+      }, {}),
+    }, 'Ticket statistics fetched successfully');
   }
 }

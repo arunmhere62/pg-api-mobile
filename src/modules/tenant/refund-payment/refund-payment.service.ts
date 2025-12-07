@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { ResponseUtil } from '../../../common/utils/response.util';
 import { CreateRefundPaymentDto, UpdateRefundPaymentDto } from './dto';
 
 @Injectable()
@@ -89,11 +90,7 @@ export class RefundPaymentService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Refund payment created successfully',
-      data: refundPayment,
-    };
+    return ResponseUtil.success(refundPayment, 'Refund payment created successfully');
   }
 
   async findAll(
@@ -221,16 +218,7 @@ export class RefundPaymentService {
       };
     });
 
-    return {
-      success: true,
-      data: enrichedData,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    return ResponseUtil.paginated(enrichedData, total, page, limit, 'Refund payments fetched successfully');
   }
 
   async findOne(id: number, pg_id: number) {
@@ -274,10 +262,7 @@ export class RefundPaymentService {
       throw new NotFoundException(`Refund payment with ID ${id} not found`);
     }
 
-    return {
-      success: true,
-      data: refundPayment,
-    };
+    return ResponseUtil.success(refundPayment, 'Refund payment fetched successfully');
   }
 
   async update(id: number, updateRefundPaymentDto: UpdateRefundPaymentDto, pg_id: number) {
@@ -354,11 +339,7 @@ export class RefundPaymentService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Refund payment updated successfully',
-      data: updatedRefund,
-    };
+    return ResponseUtil.success(updatedRefund, 'Refund payment updated successfully');
   }
 
   async remove(id: number, pg_id: number) {
@@ -382,9 +363,6 @@ export class RefundPaymentService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Refund payment deleted successfully',
-    };
+    return ResponseUtil.noContent('Refund payment deleted successfully');
   }
 }

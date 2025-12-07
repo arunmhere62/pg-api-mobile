@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ResponseUtil } from '../../common/utils/response.util';
 import { CreateVisitorDto } from './dto/create-visitor.dto';
 import { UpdateVisitorDto } from './dto/update-visitor.dto';
 
@@ -23,11 +24,7 @@ export class VisitorService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Visitor created successfully',
-      data: visitor,
-    };
+    return ResponseUtil.success(visitor, 'Visitor created successfully');
   }
 
   async findAll(
@@ -82,19 +79,7 @@ export class VisitorService {
       this.prisma.visitors.count({ where }),
     ]);
 
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-      success: true,
-      data: visitors,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasMore: page < totalPages,
-      },
-    };
+    return ResponseUtil.paginated(visitors, total, page, limit, 'Visitors fetched successfully');
   }
 
   async findOne(id: number) {
@@ -115,10 +100,7 @@ export class VisitorService {
       throw new NotFoundException('Visitor not found');
     }
 
-    return {
-      success: true,
-      data: visitor,
-    };
+    return ResponseUtil.success(visitor, 'Visitor fetched successfully');
   }
 
   async update(id: number, updateDto: UpdateVisitorDto) {
@@ -147,11 +129,7 @@ export class VisitorService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Visitor updated successfully',
-      data: updated,
-    };
+    return ResponseUtil.success(updated, 'Visitor updated successfully');
   }
 
   async remove(id: number) {
@@ -174,10 +152,7 @@ export class VisitorService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Visitor deleted successfully',
-    };
+    return ResponseUtil.noContent('Visitor deleted successfully');
   }
 
   async getStats(pgId?: number) {
@@ -199,13 +174,10 @@ export class VisitorService {
       }),
     ]);
 
-    return {
-      success: true,
-      data: {
-        total,
-        convertedToTenant,
-        notConverted,
-      },
-    };
+    return ResponseUtil.success({
+      total,
+      convertedToTenant,
+      notConverted,
+    }, 'Visitor statistics fetched successfully');
   }
 }

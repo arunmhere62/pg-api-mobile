@@ -4,15 +4,13 @@ import { S3DeletionService } from '../common/s3-deletion.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
-import { PendingPaymentService } from './pending-payment.service';
-import { TenantStatusService } from './tenant-status.service';
 import { ResponseUtil } from '../../common/utils/response.util';
+import { TenantStatusService } from './tenant-status/tenant-status.service';
 
 @Injectable()
 export class TenantService {
   constructor(
     private prisma: PrismaService,
-    private pendingPaymentService: PendingPaymentService,
     private tenantStatusService: TenantStatusService,
     private pendingRentCalculatorService: PendingRentCalculatorService,
     private s3DeletionService: S3DeletionService,
@@ -124,7 +122,7 @@ export class TenantService {
       },
     });
 
-    return tenant;
+    return ResponseUtil.success(tenant, 'Tenant created successfully');
   }
 
   /**
@@ -296,17 +294,13 @@ export class TenantService {
       ? filteredTenants 
       : filteredTenants;
 
-    return {
-      success: true,
-      data: paginatedFilteredTenants,
-      pagination: {
-        page,
-        limit,
-        total: pending_rent || pending_advance || partial_rent ? filteredTotal : total,
-        totalPages: Math.ceil((pending_rent || pending_advance || partial_rent ? filteredTotal : total) / limit),
-        hasMore: skip + limit < (pending_rent || pending_advance || partial_rent ? filteredTotal : total),
-      },
-    };
+    return ResponseUtil.paginated(
+      paginatedFilteredTenants,
+      pending_rent || pending_advance || partial_rent ? filteredTotal : total,
+      page,
+      limit,
+      'Tenants fetched successfully'
+    );
   }
 
   /**
@@ -352,17 +346,7 @@ export class TenantService {
     const paginatedTenants = filteredTenants.slice(skip, skip + limit);
     const total = filteredTenants.length;
 
-    return {
-      success: true,
-      data: paginatedTenants,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: skip + limit < total,
-      },
-    };
+    return ResponseUtil.paginated(paginatedTenants, total, page, limit, 'Tenants with pending rent fetched successfully');
   }
 
   /**
@@ -408,17 +392,7 @@ export class TenantService {
     const paginatedTenants = filteredTenants.slice(skip, skip + limit);
     const total = filteredTenants.length;
 
-    return {
-      success: true,
-      data: paginatedTenants,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: skip + limit < total,
-      },
-    };
+    return ResponseUtil.paginated(paginatedTenants, total, page, limit, 'Tenants with partial rent fetched successfully');
   }
 
   /**
@@ -464,17 +438,7 @@ export class TenantService {
     const paginatedTenants = filteredTenants.slice(skip, skip + limit);
     const total = filteredTenants.length;
 
-    return {
-      success: true,
-      data: paginatedTenants,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: skip + limit < total,
-      },
-    };
+    return ResponseUtil.paginated(paginatedTenants, total, page, limit, 'Tenants without advance payment fetched successfully');
   }
 
   /**
@@ -599,10 +563,7 @@ export class TenantService {
     // Enrich tenant with status calculations using TenantStatusService
     const enrichedTenant = this.tenantStatusService.enrichTenantsWithStatus([tenant])[0];
 
-    return {
-      success: true,
-      data: enrichedTenant,
-    };
+    return ResponseUtil.success(enrichedTenant, 'Tenant fetched successfully');
   }
 
   /**
@@ -705,11 +666,8 @@ export class TenantService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Tenant updated successfully',
-      data: tenant,
-    };
+    return ResponseUtil.success(tenant, 'Tenant updated successfully');
+
   }
 
   /**
@@ -742,10 +700,7 @@ export class TenantService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Tenant deleted successfully',
-    };
+    return ResponseUtil.noContent('Tenant deleted successfully');
   }
 
   /**

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ResponseUtil } from '../../common/utils/response.util';
 import { CreateEmployeeSalaryDto } from './dto/create-employee-salary.dto';
 import { UpdateEmployeeSalaryDto } from './dto/update-employee-salary.dto';
 
@@ -53,11 +54,7 @@ export class EmployeeSalaryService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Employee salary record created successfully',
-      data: salary,
-    };
+    return ResponseUtil.success(salary, 'Employee salary record created successfully');
   }
 
   /**
@@ -121,17 +118,7 @@ export class EmployeeSalaryService {
       }),
     ]);
 
-    return {
-      success: true,
-      data: salaries,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: page < Math.ceil(total / limit),
-      },
-    };
+    return ResponseUtil.paginated(salaries, total, page, limit, 'Salary records fetched successfully');
   }
 
   /**
@@ -176,17 +163,7 @@ export class EmployeeSalaryService {
       }),
     ]);
 
-    return {
-      success: true,
-      data: salaries,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: page < Math.ceil(total / limit),
-      },
-    };
+    return ResponseUtil.paginated(salaries, total, page, limit, 'Employee salary records fetched successfully');
   }
 
   /**
@@ -220,10 +197,7 @@ export class EmployeeSalaryService {
       throw new NotFoundException('Salary record not found');
     }
 
-    return {
-      success: true,
-      data: salary,
-    };
+    return ResponseUtil.success(salary, 'Salary record fetched successfully');
   }
 
   /**
@@ -268,11 +242,7 @@ export class EmployeeSalaryService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Salary record updated successfully',
-      data: salary,
-    };
+    return ResponseUtil.success(salary, 'Salary record updated successfully');
   }
 
   /**
@@ -298,10 +268,7 @@ export class EmployeeSalaryService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Salary record deleted successfully',
-    };
+    return ResponseUtil.noContent('Salary record deleted successfully');
   }
 
   /**
@@ -338,13 +305,10 @@ export class EmployeeSalaryService {
       }),
     ]);
 
-    return {
-      success: true,
-      data: {
-        totalAmount: totalSalaries._sum.salary_amount || 0,
-        totalCount: totalSalaries._count,
-        byEmployee: salariesByEmployee,
-      },
-    };
+    return ResponseUtil.success({
+      totalAmount: totalSalaries._sum.salary_amount || 0,
+      totalCount: totalSalaries._count,
+      byEmployee: salariesByEmployee,
+    }, 'Salary statistics fetched successfully');
   }
 }

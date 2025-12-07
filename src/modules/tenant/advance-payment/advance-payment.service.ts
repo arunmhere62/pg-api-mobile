@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { ResponseUtil } from '../../../common/utils/response.util';
 import { CreateAdvancePaymentDto, UpdateAdvancePaymentDto } from './dto';
 
 @Injectable()
@@ -98,11 +99,7 @@ export class AdvancePaymentService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Advance payment created successfully',
-      data: advancePayment,
-    };
+    return ResponseUtil.success(advancePayment, 'Advance payment created successfully');
   }
 
   /**
@@ -235,16 +232,7 @@ export class AdvancePaymentService {
       };
     });
 
-    return {
-      success: true,
-      data: enrichedData,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    return ResponseUtil.paginated(enrichedData, total, page, limit, 'Advance payments fetched successfully');
   }
 
   /**
@@ -300,10 +288,7 @@ export class AdvancePaymentService {
       },
     });
 
-    return {
-      success: true,
-      data: advancePayments,
-    };
+    return ResponseUtil.success(advancePayments, 'Advance payments fetched successfully');
   }
 
   /**
@@ -349,10 +334,7 @@ export class AdvancePaymentService {
       throw new NotFoundException(`Advance payment with ID ${id} not found`);
     }
 
-    return {
-      success: true,
-      data: advancePayment,
-    };
+    return ResponseUtil.success(advancePayment, 'Advance payment fetched successfully');
   }
 
   /**
@@ -431,11 +413,7 @@ export class AdvancePaymentService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Advance payment updated successfully',
-      data: updatedAdvancePayment,
-    };
+    return ResponseUtil.success(updatedAdvancePayment, 'Advance payment updated successfully');
   }
 
   /**
@@ -506,11 +484,7 @@ export class AdvancePaymentService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Advance payment status updated successfully',
-      data: updatedAdvancePayment,
-    };
+    return ResponseUtil.success(updatedAdvancePayment, 'Advance payment status updated successfully');
   }
 
   /**
@@ -536,9 +510,6 @@ export class AdvancePaymentService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Advance payment deleted successfully',
-    };
+    return ResponseUtil.noContent('Advance payment deleted successfully');
   }
 }

@@ -57,7 +57,7 @@ export class RoomService {
         },
       });
 
-      return room;
+      return ResponseUtil.success(room, 'Room restored successfully');
     } else {
       // Create a new room
       room = await this.prisma.rooms.create({
@@ -86,7 +86,7 @@ export class RoomService {
         },
       });
 
-      return room;
+      return ResponseUtil.success(room, 'Room created successfully');
     }
   }
 
@@ -193,10 +193,10 @@ export class RoomService {
       throw new NotFoundException(`Room with ID ${id} not found`);
     }
 
-    return {
+    return ResponseUtil.success({
       ...room,
       total_beds: room.beds.length,
-    };
+    }, 'Room fetched successfully');
   }
 
   /**
@@ -254,7 +254,7 @@ export class RoomService {
       },
     });
 
-    return room;
+    return ResponseUtil.success(room, 'Room updated successfully');
   }
 
   /**
