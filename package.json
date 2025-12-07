@@ -7,10 +7,10 @@
   "license": "MIT",
   "scripts": {
     "dev": "nest start --watch",
-    "build": "prisma generate && nest build && tsc-alias -p tsconfig.json",
-    "build:render": "npm install --legacy-peer-deps && prisma generate && nest build && tsc-alias -p tsconfig.json",
+    "build": "prisma generate && nest build && npx tsc-alias -p tsconfig.json",
+    "build:render": "npm install --legacy-peer-deps && prisma generate && nest build && npx tsc-alias -p tsconfig.json",
     "build:windows": "npm install --legacy-peer-deps --no-audit && prisma generate && npm run build",
-    "build:vercel": "prisma generate && nest build && tsc-alias -p tsconfig.json",
+    "build:vercel": "prisma generate && nest build && npx tsc-alias -p tsconfig.json",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
