@@ -23,7 +23,7 @@ export class SignupDto {
   @MinLength(6)
   password: string;
 
-  @ApiProperty({ example: '9876543210', description: 'User phone number', required: false })
+  @ApiProperty({ example: '+919876543210', description: 'User phone number with country code (e.g., +91 for India)', required: false })
   @IsString()
   @IsOptional()
   phone?: string;
@@ -52,4 +52,24 @@ export class SignupDto {
   @IsString()
   @IsOptional()
   pgPincode?: string;
+
+  @ApiProperty({ example: 'CALENDAR', description: 'Rent cycle type (CALENDAR or MIDMONTH)', required: false })
+  @IsString()
+  @IsOptional()
+  rentCycleType?: string;
+
+  @ApiProperty({ example: 1, description: 'Rent cycle start day (1-31)', required: false })
+  @IsInt()
+  @IsOptional()
+  rentCycleStart?: number;
+
+  @ApiProperty({ example: 30, description: 'Rent cycle end day (1-31)', required: false })
+  @IsInt()
+  @IsOptional()
+  rentCycleEnd?: number;
+
+  @ApiProperty({ example: 'COLIVING', description: 'PG type (COLIVING, MENS, WOMENS)', required: false })
+  @IsString()
+  @IsOptional()
+  pgType?: string;
 }

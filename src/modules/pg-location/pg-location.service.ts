@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { S3DeletionService } from '../common/s3-deletion.service';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { CreatePgLocationDto } from './dto/create-pg-location.dto';
 import { UpdatePgLocationDto } from './dto/update-pg-location.dto';
 import { ResponseUtil } from '../../common/utils/response.util';
+import { PrismaService } from '@/prisma/prisma.service';
+import { S3DeletionService } from '../common/s3-deletion.service';
 
 @Injectable()
 export class PgLocationService {
@@ -34,6 +34,10 @@ export class PgLocationService {
         organization_id: true,
         created_at: true,
         updated_at: true,
+        rent_cycle_type: true,
+        rent_cycle_start: true,
+        rent_cycle_end: true,
+        pg_type: true,
         city: {
           select: {
             s_no: true,
@@ -67,7 +71,23 @@ export class PgLocationService {
         organization_id: organizationId,
         is_deleted: false,
       },
-      include: {
+      select: {
+        s_no: true,
+        user_id: true,
+        location_name: true,
+        address: true,
+        pincode: true,
+        status: true,
+        images: true,
+        city_id: true,
+        state_id: true,
+        organization_id: true,
+        created_at: true,
+        updated_at: true,
+        rent_cycle_type: true,
+        rent_cycle_start: true,
+        rent_cycle_end: true,
+        pg_type: true,
         city: {
           select: {
             s_no: true,
@@ -106,7 +126,18 @@ export class PgLocationService {
     userId: number,
     organizationId: number,
   ) {
-    const { locationName, address, pincode, stateId, cityId, images } = createPgLocationDto;
+    const { 
+      locationName, 
+      address, 
+      pincode, 
+      stateId, 
+      cityId, 
+      images,
+      rentCycleType,
+      rentCycleStart,
+      rentCycleEnd,
+      pgType,
+    } = createPgLocationDto;
 
     try {
       const newPgLocation = await this.prisma.pg_locations.create({
@@ -121,6 +152,10 @@ export class PgLocationService {
           state_id: stateId,
           images: images || [],
           is_deleted: false,
+          rent_cycle_type: rentCycleType || 'CALENDAR',
+          rent_cycle_start: rentCycleStart || null,
+          rent_cycle_end: rentCycleEnd || null,
+          pg_type: pgType || 'COLIVING',
         },
         include: {
           city: {
@@ -202,6 +237,10 @@ export class PgLocationService {
           state_id: updatePgLocationDto.stateId,
           images: updatePgLocationDto.images,
           status: updatePgLocationDto.status,
+          rent_cycle_type: updatePgLocationDto.rentCycleType,
+          rent_cycle_start: updatePgLocationDto.rentCycleStart,
+          rent_cycle_end: updatePgLocationDto.rentCycleEnd,
+          pg_type: updatePgLocationDto.pgType,
           updated_at: new Date(),
         },
         include: {
@@ -242,6 +281,20 @@ export class PgLocationService {
 
     if (!existingPg) {
       throw new NotFoundException('PG location not found');
+    }
+
+    // Check if this is the organization's last PG location
+    const pgCountInOrganization = await this.prisma.pg_locations.count({
+      where: {
+        organization_id: organizationId,
+        is_deleted: false,
+      },
+    });
+
+    if (pgCountInOrganization === 1) {
+      throw new BadRequestException(
+        'Cannot delete the last PG location of the organization. An organization must have at least one PG location.',
+      );
     }
 
     // Check if PG location has any rooms
@@ -464,6 +517,48 @@ export class PgLocationService {
       }
       console.error('Get PG summary error:', error);
       throw new BadRequestException('Failed to fetch PG location summary');
+    }
+  }
+
+  /**
+   * Get detailed information for a specific PG location
+   */
+  async getDetails(pgId: number, userId: number, organizationId: number) {
+    try {
+      // Verify PG location exists and belongs to organization
+      const pgLocation = await this.prisma.pg_locations.findFirst({
+        where: {
+          s_no: pgId,
+          organization_id: organizationId,
+          is_deleted: false,
+        },
+        include: {
+          city: {
+            select: {
+              s_no: true,
+              name: true,
+            },
+          },
+          state: {
+            select: {
+              s_no: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      if (!pgLocation) {
+        throw new NotFoundException('PG location not found');
+      }
+
+      return ResponseUtil.success(pgLocation, 'PG location details fetched successfully');
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Get PG details error:', error);
+      throw new BadRequestException('Failed to fetch PG location details');
     }
   }
 

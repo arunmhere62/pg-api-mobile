@@ -16,7 +16,7 @@ export class AuthController {
 
   @Post('send-otp')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Send OTP to user phone number' })
+  @ApiOperation({ summary: 'Send OTP to user phone number (for login)' })
   @ApiResponse({
     status: 200,
     description: 'OTP sent successfully',
@@ -26,6 +26,19 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Failed to send OTP' })
   async sendOtp(@Body() sendOtpDto: SendOtpDto) {
     return this.authService.sendOtp(sendOtpDto);
+  }
+
+  @Post('send-signup-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send OTP to phone number for signup verification' })
+  @ApiResponse({
+    status: 200,
+    description: 'OTP sent successfully',
+    type: AuthResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Failed to send OTP' })
+  async sendSignupOtp(@Body() sendOtpDto: SendOtpDto) {
+    return this.authService.sendSignupOtp(sendOtpDto);
   }
 
   @Post('verify-otp')
@@ -40,6 +53,19 @@ export class AuthController {
   @ApiResponse({ status: 404, description: 'User not found' })
   async verifyOtp(@Body() verifyOtpDto: VerifyOtpDto) {
     return this.authService.verifyOtp(verifyOtpDto);
+  }
+
+  @Post('verify-signup-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify OTP for signup' })
+  @ApiResponse({
+    status: 200,
+    description: 'Phone number verified successfully',
+    type: AuthResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Invalid or expired OTP' })
+  async verifySignupOtp(@Body() verifyOtpDto: VerifyOtpDto) {
+    return this.authService.verifySignupOtp(verifyOtpDto);
   }
 
   @Post('resend-otp')
@@ -79,6 +105,21 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Email or phone already registered' })
   @ApiResponse({ status: 500, description: 'Failed to create account' })
   async signup(@Body() signupDto: SignupDto) {
+    console.log('📝 Signup request received:', {
+      organizationName: signupDto.organizationName,
+      name: signupDto.name,
+      email: signupDto.email,
+      phone: signupDto.phone,
+      pgName: signupDto.pgName,
+      pgAddress: signupDto.pgAddress,
+      stateId: signupDto.stateId,
+      cityId: signupDto.cityId,
+      pgPincode: signupDto.pgPincode,
+      rentCycleType: signupDto.rentCycleType,
+      rentCycleStart: signupDto.rentCycleStart,
+      rentCycleEnd: signupDto.rentCycleEnd,
+      pgType: signupDto.pgType,
+    });
     return this.authService.signup(signupDto);
   }
 

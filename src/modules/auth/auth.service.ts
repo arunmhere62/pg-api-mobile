@@ -35,7 +35,7 @@ export class AuthService {
   }
 
   /**
-   * Send OTP to user's phone
+   * Send OTP to user's phone (for login - user must exist)
    */
   async sendOtp(sendOtpDto: SendOtpDto) {
     const { phone } = sendOtpDto;
@@ -60,6 +60,21 @@ export class AuthService {
       throw new NotFoundException('User not found with this phone number');
     }
 
+    return this.generateAndSendOtp(phone);
+  }
+
+  /**
+   * Send OTP for signup (user doesn't need to exist yet)
+   */
+  async sendSignupOtp(sendOtpDto: SendOtpDto) {
+    const { phone } = sendOtpDto;
+    return this.generateAndSendOtp(phone);
+  }
+
+  /**
+   * Generate and send OTP via SMS
+   */
+  private async generateAndSendOtp(phone: string) {
     // Generate OTP
     const otp = this.generateOtp();
     const expiresAt = new Date();
@@ -90,39 +105,15 @@ export class AuthService {
   }
 
   /**
-   * Verify OTP and login user
+   * Verify OTP and login user (for login flow)
    */
   async verifyOtp(verifyOtpDto: VerifyOtpDto) {
     const { phone, otp } = verifyOtpDto;
 
-    // Get stored OTP
-    const storedOtp = this.otpStore.get(phone);
-
-    if (!storedOtp) {
-      throw new UnauthorizedException('OTP not found or expired. Please request a new OTP.');
-    }
-
-    // Check if OTP is expired
-    if (new Date() > storedOtp.expiresAt) {
-      this.otpStore.delete(phone);
-      throw new UnauthorizedException('OTP has expired. Please request a new OTP.');
-    }
-
-    // Check attempts
-    if (storedOtp.attempts >= this.MAX_ATTEMPTS) {
-      this.otpStore.delete(phone);
-      throw new UnauthorizedException(
-        'Maximum verification attempts exceeded. Please request a new OTP.',
-      );
-    }
-
-    // Verify OTP
-    if (storedOtp.otp !== otp) {
-      storedOtp.attempts += 1;
-      this.otpStore.set(phone, storedOtp);
-      throw new UnauthorizedException(
-        `Invalid OTP. ${this.MAX_ATTEMPTS - storedOtp.attempts} attempts remaining.`,
-      );
+    // Verify OTP validity
+    const isValidOtp = this.validateOtp(phone, otp);
+    if (!isValidOtp) {
+      return isValidOtp; // Returns error response
     }
 
     // OTP is valid, remove from store
@@ -201,6 +192,65 @@ export class AuthService {
       // TODO: Add JWT token generation
       // token: 'jwt_token_here'
     };
+  }
+
+  /**
+   * Verify OTP for signup (doesn't require user to exist)
+   */
+  async verifySignupOtp(verifyOtpDto: VerifyOtpDto) {
+    const { phone, otp } = verifyOtpDto;
+
+    // Validate OTP (will throw if invalid)
+    this.validateOtp(phone, otp);
+
+    // OTP is valid, remove from store
+    this.otpStore.delete(phone);
+
+    return {
+      success: true,
+      message: 'Phone number verified successfully',
+      data: {
+        phone,
+        verified: true,
+      },
+    };
+  }
+
+  /**
+   * Validate OTP without throwing errors
+   */
+  private validateOtp(phone: string, otp: string) {
+    // Get stored OTP
+    const storedOtp = this.otpStore.get(phone);
+
+    if (!storedOtp) {
+      throw new UnauthorizedException('OTP not found or expired. Please request a new OTP.');
+    }
+
+    // Check if OTP is expired
+    if (new Date() > storedOtp.expiresAt) {
+      this.otpStore.delete(phone);
+      throw new UnauthorizedException('OTP has expired. Please request a new OTP.');
+    }
+
+    // Check attempts
+    if (storedOtp.attempts >= this.MAX_ATTEMPTS) {
+      this.otpStore.delete(phone);
+      throw new UnauthorizedException(
+        'Maximum verification attempts exceeded. Please request a new OTP.',
+      );
+    }
+
+    // Verify OTP
+    if (storedOtp.otp !== otp) {
+      storedOtp.attempts += 1;
+      this.otpStore.set(phone, storedOtp);
+      throw new UnauthorizedException(
+        `Invalid OTP. ${this.MAX_ATTEMPTS - storedOtp.attempts} attempts remaining.`,
+      );
+    }
+
+    return { success: true };
   }
 
   /**

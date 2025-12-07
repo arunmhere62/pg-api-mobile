@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsInt, IsArray, MinLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsInt, IsArray, MinLength, IsEnum, Min, Max } from 'class-validator';
 
 export class CreatePgLocationDto {
   @ApiProperty({ example: 'Green Valley PG', description: 'PG location name' })
@@ -37,4 +37,46 @@ export class CreatePgLocationDto {
   @IsArray()
   @IsOptional()
   images?: string[];
+
+  @ApiProperty({ 
+    example: 'CALENDAR', 
+    description: 'Rent cycle type',
+    enum: ['CALENDAR', 'MIDMONTH'],
+    required: false
+  })
+  @IsEnum(['CALENDAR', 'MIDMONTH'])
+  @IsOptional()
+  rentCycleType?: 'CALENDAR' | 'MIDMONTH';
+
+  @ApiProperty({ 
+    example: 1, 
+    description: 'Rent cycle start day (1-31)',
+    required: false
+  })
+  @IsInt()
+  @IsOptional()
+  @Min(1)
+  @Max(31)
+  rentCycleStart?: number;
+
+  @ApiProperty({ 
+    example: 30, 
+    description: 'Rent cycle end day (1-31)',
+    required: false
+  })
+  @IsInt()
+  @IsOptional()
+  @Min(1)
+  @Max(31)
+  rentCycleEnd?: number;
+
+  @ApiProperty({ 
+    example: 'COLIVING', 
+    description: 'PG type',
+    enum: ['COLIVING', 'MENS', 'WOMENS'],
+    required: false
+  })
+  @IsEnum(['COLIVING', 'MENS', 'WOMENS'])
+  @IsOptional()
+  pgType?: 'COLIVING' | 'MENS' | 'WOMENS';
 }

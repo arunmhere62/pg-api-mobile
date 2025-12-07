@@ -70,10 +70,14 @@ export class AuthDbService {
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + this.OTP_EXPIRY_MINUTES);
 
-    // Check if user already has an OTP record
+    // Check if phone already has an unverified OTP record (search by phone, not user_id)
     const existingOtp = await this.prisma.otp_verifications.findFirst({
       where: {
-        user_id: user.s_no,
+        phone: phone,
+        is_verified: false,
+      },
+      orderBy: {
+        created_at: 'desc',
       },
     });
 
@@ -91,16 +95,19 @@ export class AuthDbService {
           verified_at: null,
           ip_address: ipAddress,
           user_agent: userAgent,
+          user_id: user.s_no, // Ensure user_id is set
         },
       });
     } else {
-      // Create new record (first time for this user)
+      // Create new record (first time for this phone)
       await this.prisma.otp_verifications.create({
         data: {
           user_id: user.s_no,
           phone,
           otp,
           expires_at: expiresAt,
+          is_verified: false,
+          attempts: 0,
           ip_address: ipAddress,
           user_agent: userAgent,
         },
@@ -294,6 +301,164 @@ export class AuthDbService {
   }
 
   /**
+   * Send OTP for signup (doesn't require user to exist)
+   */
+  async sendSignupOtp(sendOtpDto: SendOtpDto, ipAddress?: string, userAgent?: string) {
+    const { phone } = sendOtpDto;
+
+    // Generate OTP
+    const otp = this.generateOtp();
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + this.OTP_EXPIRY_MINUTES);
+
+    // Check if phone already has an unverified OTP record
+    const existingOtp = await this.prisma.otp_verifications.findFirst({
+      where: {
+        phone: phone,
+        is_verified: false,
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
+
+    if (existingOtp) {
+      // Update existing record
+      await this.prisma.otp_verifications.update({
+        where: {
+          s_no: existingOtp.s_no,
+        },
+        data: {
+          otp,
+          is_verified: false,
+          attempts: 0,
+          expires_at: expiresAt,
+          verified_at: null,
+          ip_address: ipAddress,
+          user_agent: userAgent,
+        },
+      });
+    } else {
+      // Create new record (first time for this phone)
+      await this.prisma.otp_verifications.create({
+        data: {
+          phone,
+          otp,
+          expires_at: expiresAt,
+          is_verified: false,
+          attempts: 0,
+          ip_address: ipAddress,
+          user_agent: userAgent,
+        },
+      });
+    }
+
+    // Send OTP via SMS using strategy pattern
+    const otpStrategy = this.otpStrategyFactory.getStrategy();
+    const smsSent = await otpStrategy.sendOtp(phone, otp);
+
+    if (!smsSent) {
+      throw new BadRequestException('Failed to send OTP. Please try again.');
+    }
+
+    return {
+      success: true,
+      message: 'OTP sent successfully',
+      data: {
+        phone,
+        expiresIn: `${this.OTP_EXPIRY_MINUTES} minutes`,
+      },
+    };
+  }
+
+  /**
+   * Verify OTP for signup (doesn't require user to exist)
+   */
+  async verifySignupOtp(verifyOtpDto: VerifyOtpDto) {
+    const { phone, otp } = verifyOtpDto;
+
+    console.log(`🔍 [SIGNUP OTP VERIFY] Phone: ${phone}, Provided OTP: ${otp}`);
+
+    // Find the latest unverified OTP for this phone
+    const otpRecord = await this.prisma.otp_verifications.findFirst({
+      where: {
+        phone: phone,
+        is_verified: false,
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
+
+    if (!otpRecord) {
+      console.log(`❌ [SIGNUP OTP VERIFY] No OTP record found for phone: ${phone}`);
+      throw new UnauthorizedException('OTP not found or expired. Please request a new OTP.');
+    }
+
+    console.log(`📋 [SIGNUP OTP VERIFY] Found OTP record - Stored OTP: ${otpRecord.otp}, Attempts: ${otpRecord.attempts}, Expires: ${otpRecord.expires_at}`);
+
+    // Check if OTP is expired
+    if (new Date() > otpRecord.expires_at) {
+      await this.prisma.otp_verifications.update({
+        where: { s_no: otpRecord.s_no },
+        data: { is_verified: true }, // Mark as verified to invalidate
+      });
+      throw new UnauthorizedException('OTP has expired. Please request a new OTP.');
+    }
+
+    // Check attempts
+    if (otpRecord.attempts >= this.MAX_ATTEMPTS) {
+      await this.prisma.otp_verifications.update({
+        where: { s_no: otpRecord.s_no },
+        data: { is_verified: true }, // Mark as verified to invalidate
+      });
+      throw new UnauthorizedException(
+        'Maximum verification attempts exceeded. Please request a new OTP.',
+      );
+    }
+
+    // Verify OTP using strategy pattern
+    const otpStrategy = this.otpStrategyFactory.getStrategy();
+    const isValid = otpStrategy.verifyOtp(phone, otp, otpRecord.otp);
+
+    console.log(`🔐 [SIGNUP OTP VERIFY] Strategy: ${otpStrategy.getStrategyName()}, Is Valid: ${isValid}`);
+
+    if (!isValid) {
+      const newAttempts = otpRecord.attempts + 1;
+      const attemptsRemaining = this.MAX_ATTEMPTS - newAttempts;
+      console.log(`❌ [SIGNUP OTP VERIFY] Invalid OTP. Attempts: ${newAttempts}/${this.MAX_ATTEMPTS}, Remaining: ${attemptsRemaining}`);
+      
+      await this.prisma.otp_verifications.update({
+        where: { s_no: otpRecord.s_no },
+        data: { attempts: newAttempts },
+      });
+      throw new UnauthorizedException(
+        `Invalid OTP. ${attemptsRemaining} attempts remaining.`,
+      );
+    }
+
+    // OTP is valid, mark as verified
+    console.log(`✅ [SIGNUP OTP VERIFY] OTP verified successfully for phone: ${phone}`);
+    
+    await this.prisma.otp_verifications.update({
+      where: { s_no: otpRecord.s_no },
+      data: {
+        is_verified: true,
+        verified_at: new Date(),
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Phone number verified successfully',
+      data: {
+        phone,
+        verified: true,
+      },
+    };
+  }
+
+  /**
    * User Signup - Create organization, user, role, and PG location
    */
   async signup(signupDto: SignupDto) {
@@ -308,6 +473,10 @@ export class AuthDbService {
       stateId,
       cityId,
       pgPincode,
+      rentCycleType,
+      rentCycleStart,
+      rentCycleEnd,
+      pgType,
     } = signupDto;
 
     // Check if email already exists
@@ -333,12 +502,13 @@ export class AuthDbService {
     try {
       // Use transaction to ensure all operations succeed or fail together
       const result = await this.prisma.$transaction(async (prisma) => {
-        // 1. Create organization first
+        // 1. Create organization first (status INACTIVE until admin approval)
         const organization = await prisma.organization.create({
           data: {
             name: organizationName,
             description: `Organization for ${organizationName}`,
             is_deleted: false,
+            status: 'INACTIVE' as any, // Organization needs admin approval
           },
         });
 
@@ -361,7 +531,7 @@ export class AuthDbService {
             email,
             password, // Note: In production, hash the password using bcrypt
             phone,
-            status: 'INACTIVE', // User needs admin approval
+            status: 'ACTIVE', // User needs admin approval
             role_id: role.s_no,
             organization_id: organization.s_no,
             is_deleted: false,
@@ -378,6 +548,18 @@ export class AuthDbService {
         });
 
         // 5. Create PG Location
+        // Validate pg_type enum value
+        const validPgTypes = ['COLIVING', 'MENS', 'WOMENS'];
+        const pgTypeValue = pgType && validPgTypes.includes(pgType.toUpperCase()) 
+          ? (pgType.toUpperCase() as any)
+          : 'COLIVING';
+
+        // Validate rent_cycle_type enum value
+        const validRentCycleTypes = ['CALENDAR', 'MIDMONTH'];
+        const rentCycleTypeValue = rentCycleType && validRentCycleTypes.includes(rentCycleType.toUpperCase())
+          ? (rentCycleType.toUpperCase() as any)
+          : 'CALENDAR';
+
         const pgLocation = await prisma.pg_locations.create({
           data: {
             user_id: user.s_no,
@@ -389,6 +571,10 @@ export class AuthDbService {
             city_id: cityId,
             state_id: stateId,
             is_deleted: false,
+            rent_cycle_type: rentCycleTypeValue,
+            rent_cycle_start: rentCycleStart,
+            rent_cycle_end: rentCycleEnd,
+            pg_type: pgTypeValue,
           },
         });
 
@@ -412,9 +598,15 @@ export class AuthDbService {
         message: 'Account created successfully. Please wait for admin approval.',
         data: result,
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Signup error:', error);
-      throw new BadRequestException('Failed to create account. Please try again.');
+      // Re-throw BadRequestException with original message if it's a validation error
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      // Provide more specific error message for database/transaction errors
+      const message = error?.message || 'Failed to create account. Please try again.';
+      throw new BadRequestException(message);
     }
   }
 

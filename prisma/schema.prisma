@@ -284,41 +284,46 @@ model expenses {
 }
 
 model organization {
-  s_no         Int            @id @default(autoincrement())
-  name         String         @db.VarChar(100)
-  description  String?        @db.Text
-  created_at   DateTime?      @default(now()) @db.DateTime(0)
-  updated_at   DateTime?      @default(now()) @db.DateTime(0)
-  deleted_at   DateTime?      @db.DateTime(0)
+  s_no         Int                 @id @default(autoincrement())
+  name         String              @db.VarChar(100)
+  description  String?             @db.Text
+  created_at   DateTime?           @default(now()) @db.DateTime(0)
+  updated_at   DateTime?           @default(now()) @db.DateTime(0)
+  deleted_at   DateTime?           @db.DateTime(0)
   created_by   Int?
   updated_by   Int?
   deleted_by   Int?
-  is_deleted   Boolean?       @default(false)
+  is_deleted   Boolean?            @default(false)
+  status       organization_status @default(ACTIVE)
   pg_locations pg_locations[]
 }
 
 model pg_locations {
-  s_no             Int                  @id @unique(map: "s_no_2") @default(autoincrement())
+  s_no             Int                          @id @unique(map: "s_no_2") @default(autoincrement())
   user_id          Int
-  location_name    String               @db.VarChar(100)
-  address          String               @db.VarChar(255)
-  pincode          String?              @db.VarChar(10)
-  created_at       DateTime?            @default(now()) @db.Timestamp(0)
-  updated_at       DateTime?            @default(now()) @db.Timestamp(0)
-  status           pg_locations_status? @default(ACTIVE)
+  location_name    String                       @db.VarChar(100)
+  address          String                       @db.VarChar(255)
+  pincode          String?                      @db.VarChar(10)
+  rent_cycle_start Int?
+  rent_cycle_end   Int?
+  rent_cycle_type  pg_locations_rent_cycle_type @default(CALENDAR)
+  created_at       DateTime?                    @default(now()) @db.Timestamp(0)
+  updated_at       DateTime?                    @default(now()) @db.Timestamp(0)
+  status           pg_locations_status?         @default(ACTIVE)
   images           Json?
   city_id          Int?
   state_id         Int?
   organization_id  Int
-  is_deleted       Boolean              @default(false)
+  is_deleted       Boolean                      @default(false)
+  pg_type          pg_locations_pg_type         @default(COLIVING)
   advance_payments advance_payments[]
   beds             beds[]
   current_bills    current_bills[]
   employee_salary  employee_salary[]
   expenses         expenses[]
-  city             city?                @relation(fields: [city_id], references: [s_no], onDelete: Cascade, onUpdate: Restrict, map: "fk_city")
-  organization     organization         @relation(fields: [organization_id], references: [s_no], onDelete: Cascade, map: "fk_pg_organization")
-  state            state?               @relation(fields: [state_id], references: [s_no], onDelete: Cascade, onUpdate: Restrict, map: "fk_state")
+  city             city?                        @relation(fields: [city_id], references: [s_no], onDelete: Cascade, onUpdate: Restrict, map: "fk_city")
+  organization     organization                 @relation(fields: [organization_id], references: [s_no], onDelete: Cascade, map: "fk_pg_organization")
+  state            state?                       @relation(fields: [state_id], references: [s_no], onDelete: Cascade, onUpdate: Restrict, map: "fk_state")
   refund_payments  refund_payments[]
   rooms            rooms[]
   tenant_payments  tenant_payments[]
@@ -787,4 +792,20 @@ enum permissions_master_action {
   EDIT
   VIEW
   DELETE
+}
+
+enum pg_locations_pg_type {
+  COLIVING
+  MENS
+  WOMENS
+}
+
+enum pg_locations_rent_cycle_type {
+  CALENDAR
+  MIDMONTH
+}
+
+enum organization_status {
+  ACTIVE
+  INACTIVE
 }
