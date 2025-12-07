@@ -2,8 +2,8 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { CreatePgLocationDto } from './dto/create-pg-location.dto';
 import { UpdatePgLocationDto } from './dto/update-pg-location.dto';
 import { ResponseUtil } from '../../common/utils/response.util';
-import { PrismaService } from '@/prisma/prisma.service';
 import { S3DeletionService } from '../common/s3-deletion.service';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class PgLocationService {

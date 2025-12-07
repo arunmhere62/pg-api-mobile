@@ -1,4 +1,4 @@
-import { CommonHeaders, CommonHeadersDecorator } from '@/common/decorators/common-headers.decorator';
+import { CommonHeaders, CommonHeadersDecorator } from '../../../common/decorators/common-headers.decorator';
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { PendingPaymentService } from './pending-payment.service';
 
