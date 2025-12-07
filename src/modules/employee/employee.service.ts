@@ -1,12 +1,16 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { S3DeletionService } from '../common/s3-deletion.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { ResponseUtil } from '../../common/utils/response.util';
 
 @Injectable()
 export class EmployeeService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private s3DeletionService: S3DeletionService,
+  ) {}
 
   /**
    * Create a new employee
@@ -72,9 +76,11 @@ export class EmployeeService {
 
   /**
    * Get all employees with pagination and filters
+   * Excludes the current user from the list
    */
   async findAll(
     organizationId: number,
+    currentUserId: number,
     page: number = 1,
     limit: number = 10,
     pgId?: number,
@@ -86,6 +92,9 @@ export class EmployeeService {
     const whereClause: any = {
       organization_id: organizationId,
       is_deleted: false,
+      s_no: {
+        not: currentUserId, // Exclude current user from list
+      },
     };
 
     if (pgId) {
@@ -215,7 +224,7 @@ export class EmployeeService {
   /**
    * Update an employee
    */
-  async update(id: number, organizationId: number, updateDto: UpdateEmployeeDto) {
+  async update(id: number, organizationId: number, currentUserId: number, updateDto: UpdateEmployeeDto) {
     // Check if employee exists
     const existing = await this.prisma.user.findFirst({
       where: {
@@ -223,10 +232,77 @@ export class EmployeeService {
         organization_id: organizationId,
         is_deleted: false,
       },
+      include: {
+        roles: {
+          select: {
+            s_no: true,
+            role_name: true,
+          },
+        },
+      },
     });
 
     if (!existing) {
       throw new NotFoundException('Employee not found');
+    }
+
+    // Prevent self-update
+    if (currentUserId === id) {
+      throw new BadRequestException('You cannot update your own account');
+    }
+
+    // Check if trying to change role of last admin
+    if (updateDto.role_id && updateDto.role_id !== existing.role_id) {
+      // Check if this employee is an admin
+      const adminRoleId = await this.prisma.roles.findFirst({
+        where: {
+          role_name: 'ADMIN',
+        },
+        select: { s_no: true },
+      });
+
+      if (adminRoleId && existing.role_id === adminRoleId.s_no) {
+        // Count total admins in organization
+        const adminCount = await this.prisma.user.count({
+          where: {
+            organization_id: organizationId,
+            role_id: adminRoleId.s_no,
+            is_deleted: false,
+          },
+        });
+
+        if (adminCount === 1) {
+          throw new BadRequestException('Cannot change role of the last admin. Assign another admin first.');
+        }
+      }
+    }
+
+    // Handle S3 image deletion if profile images are being updated
+    if (updateDto.profile_images !== undefined) {
+      const oldImages = (Array.isArray(existing.profile_images) ? existing.profile_images : 
+        (typeof existing.profile_images === 'string' ? JSON.parse(existing.profile_images) : [])) as string[];
+      const newImages = (Array.isArray(updateDto.profile_images) ? updateDto.profile_images : []) as string[];
+      
+      await this.s3DeletionService.deleteRemovedFiles(
+        oldImages,
+        newImages,
+        'employee',
+        'profile_images',
+      );
+    }
+
+    // Handle S3 document deletion if proof documents are being updated
+    if (updateDto.proof_documents !== undefined) {
+      const oldDocuments = (Array.isArray(existing.proof_documents) ? existing.proof_documents : 
+        (typeof existing.proof_documents === 'string' ? JSON.parse(existing.proof_documents) : [])) as string[];
+      const newDocuments = (Array.isArray(updateDto.proof_documents) ? updateDto.proof_documents : []) as string[];
+      
+      await this.s3DeletionService.deleteRemovedFiles(
+        oldDocuments,
+        newDocuments,
+        'employee',
+        'proof_documents',
+      );
     }
 
     const employee = await this.prisma.user.update({
@@ -291,7 +367,7 @@ export class EmployeeService {
   /**
    * Soft delete an employee
    */
-  async remove(id: number, organizationId: number) {
+  async remove(id: number, organizationId: number, currentUserId: number) {
     // Check if employee exists
     const existing = await this.prisma.user.findFirst({
       where: {
@@ -299,10 +375,65 @@ export class EmployeeService {
         organization_id: organizationId,
         is_deleted: false,
       },
+      include: {
+        roles: {
+          select: {
+            s_no: true,
+            role_name: true,
+          },
+        },
+      },
     });
 
     if (!existing) {
       throw new NotFoundException('Employee not found');
+    }
+
+    // Prevent self-deletion
+    if (currentUserId === id) {
+      throw new BadRequestException('You cannot delete your own account');
+    }
+
+    // Check if trying to delete last admin
+    const adminRoleId = await this.prisma.roles.findFirst({
+      where: {
+        role_name: 'ADMIN',
+      },
+      select: { s_no: true },
+    });
+
+    if (adminRoleId && existing.role_id === adminRoleId.s_no) {
+      const adminCount = await this.prisma.user.count({
+        where: {
+          organization_id: organizationId,
+          role_id: adminRoleId.s_no,
+          is_deleted: false,
+        },
+      });
+
+      if (adminCount === 1) {
+        throw new BadRequestException('Cannot delete the last admin. Assign another admin first.');
+      }
+    }
+
+    // Delete S3 profile images before soft deleting employee
+    if (existing.profile_images && Array.isArray(existing.profile_images) && existing.profile_images.length > 0) {
+      const profileImages = (existing.profile_images as string[]);
+      await this.s3DeletionService.deleteAllFiles(
+        profileImages,
+        'employee',
+        'profile_images',
+      );
+    }
+
+    // Delete S3 proof documents before soft deleting employee
+    if (existing.proof_documents && Array.isArray(existing.proof_documents) && existing.proof_documents.length > 0) {
+      const proofDocuments = (existing.proof_documents as string[]);
+      await this.s3DeletionService.deleteAllFiles(
+        proofDocuments,
+        'employee',
+        'proof_documents',
+      );
     }
 
     await this.prisma.user.update({

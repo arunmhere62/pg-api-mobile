@@ -48,7 +48,7 @@ export class EmployeeController {
   @ApiQuery({ name: 'role_id', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiResponse({ status: 200, description: 'Employees retrieved successfully' })
-  @RequireHeaders({ organization_id: true })
+  @RequireHeaders({ organization_id: true, user_id: true })
   findAll(
     @ValidatedHeaders() headers: ValidatedHeaders,
     @Query('page') page?: string,
@@ -64,6 +64,7 @@ export class EmployeeController {
 
     return this.employeeService.findAll(
       headers.organization_id!,
+      headers.user_id!,
       pageNum,
       limitNum,
       pgIdNum,
@@ -107,7 +108,7 @@ export class EmployeeController {
     @Param('id', ParseIntPipe) id: number,
     @Body() updateDto: UpdateEmployeeDto,
   ) {
-    return this.employeeService.update(id, headers.organization_id!, updateDto);
+    return this.employeeService.update(id, headers.organization_id!, headers.user_id!, updateDto);
   }
 
   @Delete(':id')
@@ -119,6 +120,6 @@ export class EmployeeController {
     @ValidatedHeaders() headers: ValidatedHeaders,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.employeeService.remove(id, headers.organization_id!);
+    return this.employeeService.remove(id, headers.organization_id!, headers.user_id!);
   }
 }

@@ -40,7 +40,7 @@ export class RolesService {
       },
     });
 
-    return role;
+    return ResponseUtil.created(role, 'Role created successfully');
   }
 
   /**
@@ -117,7 +117,7 @@ export class RolesService {
       throw new NotFoundException('Role not found');
     }
 
-    return role;
+    return ResponseUtil.success(role, 'Role retrieved successfully');
   }
 
   /**
@@ -165,7 +165,7 @@ export class RolesService {
       },
     });
 
-    return updatedRole;
+    return ResponseUtil.success(updatedRole, 'Role updated successfully');
   }
 
   /**
@@ -224,6 +224,6 @@ export class RolesService {
       },
     });
 
-    return updatedRole;
+    return ResponseUtil.success(updatedRole, 'Role permissions updated successfully');
   }
 }

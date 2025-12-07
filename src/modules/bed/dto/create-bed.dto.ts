@@ -14,8 +14,7 @@ export class CreateBedDto {
   @IsOptional()
   images?: any;
 
-  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  bed_price?: number;
+  @Min(0.01)
+  bed_price: number;
 }

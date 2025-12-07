@@ -107,7 +107,7 @@ export class BedService {
       });
     }
 
-    return bed;
+    return ResponseUtil.created(bed, 'Bed created successfully');
   }
 
   /**
@@ -199,7 +199,7 @@ export class BedService {
       is_occupied: bed.tenants && bed.tenants.length > 0,
     }));
 
-    return ResponseUtil.paginated(bedsWithStatus, total, page, limit, 'Beds fetched successfully');
+    return ResponseUtil.paginated(bedsWithStatus, total, page, limit, 'Beds retrieved successfully');
   }
 
   /**
@@ -245,7 +245,7 @@ export class BedService {
       is_occupied: bed.tenants && bed.tenants.length > 0,
     }));
 
-    return ResponseUtil.success(bedsWithStatus, 'Beds fetched successfully');
+    return ResponseUtil.success(bedsWithStatus, 'Beds retrieved successfully');
   }
 
   /**
@@ -278,7 +278,7 @@ export class BedService {
       throw new NotFoundException(`Bed with ID ${id} not found`);
     }
 
-    return bed;
+    return ResponseUtil.success(bed, 'Bed retrieved successfully');
   }
 
   /**
@@ -354,11 +354,7 @@ export class BedService {
       },
     });
 
-    return {
-      success: true,
-      message: 'Bed updated successfully',
-      data: bed,
-    };
+    return ResponseUtil.success(bed, 'Bed updated successfully');
   }
 
   /**
