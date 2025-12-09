@@ -4,7 +4,7 @@ import { CommonModule } from '../common/common.module';
 import { TenantController } from './tenant.controller';
 import { TenantService } from './tenant.service';
 import { CheckoutModule } from './checkout/checkout.module';
-import { TenantPaymentModule } from './tenant-payment/tenant-payment.module';
+import { TenantPaymentModule } from './tenant-payment/rent-payment.module';
 import { AdvancePaymentModule } from './advance-payment/advance-payment.module';
 import { RefundPaymentModule } from './refund-payment/refund-payment.module';
 import { CurrentBillModule } from './current-bill/current-bill.module';

@@ -210,6 +210,7 @@ export class PgLocationService {
       const rentPaymentCount = await this.prisma.tenant_payments.count({
         where: {
           pg_id: id,
+          is_deleted : false
         },
       });
 

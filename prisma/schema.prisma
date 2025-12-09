@@ -435,7 +435,6 @@ model tenant_payments {
   rooms              rooms                          @relation(fields: [room_id], references: [s_no], onDelete: Cascade, onUpdate: Restrict, map: "fk_tenant_payment_room")
   tenants            tenants                        @relation(fields: [tenant_id], references: [s_no], onDelete: Cascade, onUpdate: Restrict, map: "fk_tenant_payment_tenant")
 
-  @@unique([tenant_id, pg_id, room_id, payment_date, is_deleted], map: "unique_payment")
   @@index([current_bill_id], map: "fk_current_bill")
   @@index([bed_id], map: "fk_tenant_payment_bed")
   @@index([pg_id], map: "fk_tenant_payment_pg")

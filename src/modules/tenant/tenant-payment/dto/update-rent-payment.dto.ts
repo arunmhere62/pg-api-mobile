@@ -1,4 +1,4 @@
 import { PartialType } from '@nestjs/swagger';
-import { CreateTenantPaymentDto } from './create-tenant-payment.dto';
+import { CreateTenantPaymentDto } from './create-rent-payment.dto';
 
 export class UpdateTenantPaymentDto extends PartialType(CreateTenantPaymentDto) {}

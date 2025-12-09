@@ -11,7 +11,7 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { TenantPaymentService } from './tenant-payment.service';
+import { TenantPaymentService } from './rent-payment.service';
 import { CreateTenantPaymentDto, UpdateTenantPaymentDto } from './dto';
 import { HeadersValidationGuard } from '../../../common/guards/headers-validation.guard';
 import { RequireHeaders } from '../../../common/decorators/require-headers.decorator';

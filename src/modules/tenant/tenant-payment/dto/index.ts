@@ -1,2 +1,2 @@
-export * from './create-tenant-payment.dto';
-export * from './update-tenant-payment.dto';
+export * from './create-rent-payment.dto';
+export * from './update-rent-payment.dto';

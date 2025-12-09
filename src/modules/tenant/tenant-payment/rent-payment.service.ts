@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { CreateTenantPaymentDto, UpdateTenantPaymentDto } from './dto';
+import {  UpdateTenantPaymentDto } from './dto';
 import { ResponseUtil } from '../../../common/utils/response.util';
+import { CreateTenantPaymentDto } from './dto/create-rent-payment.dto';
 
 @Injectable()
 export class TenantPaymentService {
@@ -24,21 +25,6 @@ export class TenantPaymentService {
       );
     }
 
-    // Validate start_date is not before tenant's check-in date
-    if (tenant.check_in_date && createTenantPaymentDto.start_date) {
-      const checkInDate = new Date(tenant.check_in_date);
-      const startDate = new Date(createTenantPaymentDto.start_date);
-      
-      // Set time to midnight for date-only comparison
-      checkInDate.setHours(0, 0, 0, 0);
-      startDate.setHours(0, 0, 0, 0);
-      
-      if (startDate < checkInDate) {
-        throw new BadRequestException(
-          `Payment start date (${createTenantPaymentDto.start_date}) cannot be before tenant's check-in date (${tenant.check_in_date.toISOString().split('T')[0]})`
-        );
-      }
-    }
 
     // Verify room exists
     const room = await this.prisma.rooms.findUnique({
@@ -315,27 +301,6 @@ export class TenantPaymentService {
       throw new NotFoundException(`Tenant payment with ID ${id} not found`);
     }
 
-    // If start_date is being updated, validate against tenant's check-in date
-    if (updateTenantPaymentDto.start_date) {
-      const tenant = await this.prisma.tenants.findUnique({
-        where: { s_no: existingPayment.tenant_id },
-      });
-
-      if (tenant && tenant.check_in_date) {
-        const checkInDate = new Date(tenant.check_in_date);
-        const startDate = new Date(updateTenantPaymentDto.start_date);
-        
-        // Set time to midnight for date-only comparison
-        checkInDate.setHours(0, 0, 0, 0);
-        startDate.setHours(0, 0, 0, 0);
-        
-        if (startDate < checkInDate) {
-          throw new BadRequestException(
-            `Payment start date (${updateTenantPaymentDto.start_date}) cannot be before tenant's check-in date (${tenant.check_in_date.toISOString().split('T')[0]})`
-          );
-        }
-      }
-    }
 
     const updateData: any = {};
 
