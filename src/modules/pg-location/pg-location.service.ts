@@ -202,6 +202,24 @@ export class PgLocationService {
       throw new NotFoundException('PG location not found');
     }
 
+    // Check if rent cycle type is being changed and if any rent payments exist
+    if (
+      updatePgLocationDto.rentCycleType &&
+      updatePgLocationDto.rentCycleType !== existingPg.rent_cycle_type
+    ) {
+      const rentPaymentCount = await this.prisma.tenant_payments.count({
+        where: {
+          pg_id: id,
+        },
+      });
+
+      if (rentPaymentCount > 0) {
+        throw new BadRequestException(
+          `Cannot change rent cycle type. ${rentPaymentCount} rent payment(s) already exist for this PG location. Changing the rent cycle type will affect all existing and future payments.`
+        );
+      }
+    }
+
     // Handle S3 image deletion if images are being updated
     if (updatePgLocationDto.images !== undefined) {
       const oldImages = (Array.isArray(existingPg.images) ? existingPg.images : []) as string[];

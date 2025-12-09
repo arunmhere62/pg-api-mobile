@@ -17,6 +17,13 @@ export class TenantPaymentService {
       throw new NotFoundException(`Tenant with ID ${createTenantPaymentDto.tenant_id} not found`);
     }
 
+    // Check if tenant is checked out (has a check_out_date)
+    if (tenant.check_out_date) {
+      throw new BadRequestException(
+        `Cannot add rent payment for checked-out tenant. Tenant was checked out on ${new Date(tenant.check_out_date).toISOString().split('T')[0]}`
+      );
+    }
+
     // Validate start_date is not before tenant's check-in date
     if (tenant.check_in_date && createTenantPaymentDto.start_date) {
       const checkInDate = new Date(tenant.check_in_date);
@@ -49,6 +56,13 @@ export class TenantPaymentService {
 
     if (!bed) {
       throw new NotFoundException(`Bed with ID ${createTenantPaymentDto.bed_id} not found`);
+    }
+
+    // Validate amount paid does not exceed actual rent amount
+    if (createTenantPaymentDto.amount_paid > createTenantPaymentDto.actual_rent_amount) {
+      throw new BadRequestException(
+        `Amount paid (₹${createTenantPaymentDto.amount_paid}) cannot exceed actual rent amount (₹${createTenantPaymentDto.actual_rent_amount})`
+      );
     }
 
     // Create the payment
