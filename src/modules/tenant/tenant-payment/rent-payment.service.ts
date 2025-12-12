@@ -531,8 +531,11 @@ export class TenantPaymentService {
     
     if (cycleType === 'MIDMONTH') {
       const now = new Date();
-      let currentCycleStart = new Date(tenant.check_in_date);
-      const checkInDate = new Date(tenant.check_in_date);
+      
+      // Parse check-in date to avoid timezone issues
+      const checkInDateStr = tenant.check_in_date.toISOString().split('T')[0];
+      let currentCycleStart = new Date(checkInDateStr + 'T00:00:00.000Z');
+      const checkInDate = new Date(checkInDateStr + 'T00:00:00.000Z');
       let isFirstCycle = true;
       
       // Find the latest payment end date to determine how far to check
@@ -579,8 +582,13 @@ export class TenantPaymentService {
         
         // If no PAID/PARTIAL payment found for this cycle, add to gaps
         if (!paymentForCycle) {
-          const gapStartStr = cycleStart.toISOString().split('T')[0];
-          const gapEndStr = cycleEnd.toISOString().split('T')[0];
+          // Format dates to avoid timezone issues
+          const gapStartStr = cycleStart.getFullYear() + '-' + 
+            String(cycleStart.getMonth() + 1).padStart(2, '0') + '-' + 
+            String(cycleStart.getDate()).padStart(2, '0');
+          const gapEndStr = cycleEnd.getFullYear() + '-' + 
+            String(cycleEnd.getMonth() + 1).padStart(2, '0') + '-' + 
+            String(cycleEnd.getDate()).padStart(2, '0');
           
           // Calculate days missing
           const timeDiff = cycleEnd.getTime() - cycleStart.getTime();

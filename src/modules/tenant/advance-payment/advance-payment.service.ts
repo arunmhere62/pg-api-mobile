@@ -25,6 +25,20 @@ export class AdvancePaymentService {
       );
     }
 
+    // Check if tenant already has an advance payment
+    const existingAdvancePayment = await this.prisma.advance_payments.findFirst({
+      where: {
+        tenant_id: createAdvancePaymentDto.tenant_id,
+        is_deleted: false,
+      },
+    });
+
+    if (existingAdvancePayment) {
+      throw new BadRequestException(
+        `Tenant already has an advance payment. Only one advance payment per tenant is allowed.`,
+      );
+    }
+
     // Verify room exists
     const room = await this.prisma.rooms.findFirst({
       where: {

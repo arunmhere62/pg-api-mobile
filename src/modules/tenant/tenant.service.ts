@@ -785,18 +785,12 @@ export class TenantService {
       throw new NotFoundException(`Tenant with ID ${id} not found`);
     }
 
-    // Check if tenant has checked out
-    if (!tenant.check_out_date || tenant.status === 'ACTIVE') {
-      throw new BadRequestException(
-        'Cannot delete tenant who has not checked out. Please checkout the tenant first.',
-      );
-    }
-
     // Soft delete tenant
     await this.prisma.tenants.update({
       where: { s_no: id },
       data: {
         is_deleted: true,
+        status : 'INACTIVE'
       },
     });
 
