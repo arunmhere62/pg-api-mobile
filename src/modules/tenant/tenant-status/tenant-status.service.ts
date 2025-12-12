@@ -205,16 +205,7 @@ export class TenantStatusService {
     // Calculate pending months
     const pendingMonths = this.calculatePendingMonths(tenant);
 
-    // A tenant's rent is considered PAID only if:
-    // 1. No partial payments
-    // 2. No pending/failed payments
-    // 3. No rent gap (current date is covered by a PAID rent period)
-    // 4. No pending months from other calculations
-    const is_rent_paid =
-      !hasPartialPayment &&
-      !hasPendingPayment &&
-      !hasRentGap &&
-      pendingMonths === 0;
+    // Rent is partial if there are partial payments
     const is_rent_partial = hasPartialPayment;
 
     // Calculate due amounts (separate partial and pending)
@@ -246,6 +237,11 @@ export class TenantStatusService {
     }
 
     const rent_due_amount = partial_due_amount + pending_due_amount;
+
+    // Determine is_rent_paid: false if there are unpaid months, true otherwise
+    // Note: unpaid_months is calculated separately in tenant.service.ts based on rent cycle dates
+    // This will be overridden in tenant.service.ts if unpaid_months > 0
+    const is_rent_paid = pendingMonths === 0;
 
     return {
       is_rent_paid,

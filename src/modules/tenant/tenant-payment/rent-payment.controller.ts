@@ -131,4 +131,29 @@ export class TenantPaymentController {
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.tenantPaymentService.remove(id);
   }
+
+  @Get('gaps/:tenant_id')
+  @RequireHeaders({ pg_id: true })
+  @ApiOperation({ summary: 'Detect payment gaps for a tenant' })
+  @ApiResponse({ status: 200, description: 'Gap detection result' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  detectGaps(@Param('tenant_id', ParseIntPipe) tenant_id: number) {
+    return this.tenantPaymentService.detectPaymentGaps(tenant_id);
+  }
+
+  @Get('next-dates/:tenant_id')
+  @RequireHeaders({ pg_id: true })
+  @ApiOperation({ summary: 'Get suggested next payment dates (with gap detection)' })
+  @ApiQuery({ name: 'rentCycleType', required: false, type: String, description: 'CALENDAR or MIDMONTH' })
+  @ApiQuery({ name: 'skipGaps', required: false, type: Boolean, description: 'Skip gaps and get next payment after last payment' })
+  @ApiResponse({ status: 200, description: 'Suggested payment dates' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  getNextPaymentDates(
+    @Param('tenant_id', ParseIntPipe) tenant_id: number,
+    @Query('rentCycleType') rentCycleType: string = 'CALENDAR',
+    @Query('skipGaps') skipGaps: string = 'false',
+  ) {
+    const skipGapsBoolean = skipGaps === 'true';
+    return this.tenantPaymentService.getNextPaymentDates(tenant_id, rentCycleType, skipGapsBoolean);
+  }
 }

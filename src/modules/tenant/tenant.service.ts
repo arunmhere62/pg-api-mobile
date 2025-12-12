@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PendingRentCalculatorService } from '../common/pending-rent-calculator.service';
+import { RentCycleCalculatorService } from '../common/rent-cycle-calculator.service';
 import { S3DeletionService } from '../common/s3-deletion.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
@@ -13,6 +14,7 @@ export class TenantService {
     private prisma: PrismaService,
     private tenantStatusService: TenantStatusService,
     private pendingRentCalculatorService: PendingRentCalculatorService,
+    private rentCycleCalculatorService: RentCycleCalculatorService,
     private s3DeletionService: S3DeletionService,
   ) {}
 
@@ -126,7 +128,7 @@ export class TenantService {
   }
 
   /**
-   * Get all tenants with filters
+   * Get all tenants with filters and rent cycle information
    */
   async findAll(params: {
     page?: number;
@@ -171,7 +173,7 @@ export class TenantService {
     // Get total count
     const total = await this.prisma.tenants.count({ where });
 
-    // Get tenants with all related data
+    // Get tenants with all related data including rent cycle type
     const tenants = await this.prisma.tenants.findMany({
       where,
       skip,
@@ -182,6 +184,7 @@ export class TenantService {
             s_no: true,
             location_name: true,
             address: true,
+            rent_cycle_type: true,
           },
         },
         rooms: {
@@ -214,7 +217,7 @@ export class TenantService {
             is_deleted: false,
           },
           orderBy: {
-            payment_date: 'desc',
+            end_date: 'desc',
           },
           select: {
             s_no: true,
@@ -268,22 +271,119 @@ export class TenantService {
       },
     });
 
-    // Enrich tenants with status calculations using TenantStatusService
-    const enrichedTenants = this.tenantStatusService.enrichTenantsWithStatus(tenants);
+    // Enrich tenants with status calculations and rent cycle information
+    const enrichedTenants = tenants.map(tenant => {
+      const statusEnriched = this.tenantStatusService.enrichTenantsWithStatus([tenant])[0];
+      
+      // Calculate current rent cycle dates
+      let currentRentCycle = null;
+      if (tenant.pg_locations && tenant.tenant_payments.length > 0) {
+        const lastPayment = tenant.tenant_payments[0];
+        const cycleType = tenant.pg_locations.rent_cycle_type as 'CALENDAR' | 'MIDMONTH';
+        const nextCycleDates = this.rentCycleCalculatorService.getNextRentCycleDates(
+          lastPayment.end_date.toISOString().split('T')[0],
+          cycleType,
+        );
+        const daysInPeriod = this.rentCycleCalculatorService.calculateDaysInPeriod(
+          nextCycleDates.startDate,
+          nextCycleDates.endDate,
+        );
+        currentRentCycle = {
+          start_date: nextCycleDates.startDate,
+          end_date: nextCycleDates.endDate,
+          days: daysInPeriod,
+          cycle_type: cycleType,
+        };
+      } else if (tenant.pg_locations) {
+        // No previous payments, calculate from check-in date
+        const cycleType = tenant.pg_locations.rent_cycle_type as 'CALENDAR' | 'MIDMONTH';
+        const checkInDate = tenant.check_in_date.toISOString().split('T')[0];
+        let cycleDates;
+        
+        if (cycleType === 'CALENDAR') {
+          cycleDates = this.rentCycleCalculatorService.getCalendarMonthDates(checkInDate);
+        } else {
+          cycleDates = this.rentCycleCalculatorService.getMidmonthDates(checkInDate);
+        }
+        
+        const daysInPeriod = this.rentCycleCalculatorService.calculateDaysInPeriod(
+          cycleDates.start,
+          cycleDates.end,
+        );
+        currentRentCycle = {
+          start_date: cycleDates.start,
+          end_date: cycleDates.end,
+          days: daysInPeriod,
+          cycle_type: cycleType,
+        };
+      }
 
-    // Filter by pending rent if requested - use TenantStatusService
+      // Get most recent payment for status determination
+      const lastPayment = tenant.tenant_payments.length > 0 ? tenant.tenant_payments[0] : null;
+      let paymentStatus = 'NO_PAYMENT';
+      
+      if (lastPayment) {
+        if (lastPayment.status === 'PAID') {
+          paymentStatus = 'PAID';
+        } else if (lastPayment.status === 'PARTIAL') {
+          paymentStatus = 'PARTIAL';
+        } else if (lastPayment.status === 'PENDING') {
+          paymentStatus = 'PENDING';
+        } else if (lastPayment.status === 'FAILED') {
+          paymentStatus = 'FAILED';
+        }
+      }
+
+      // Extract partial payments from all tenant payments
+      const partialPayments = tenant.tenant_payments.filter(
+        (payment: any) => payment.status === 'PARTIAL'
+      );
+
+      // Calculate total partial amount due
+      const totalPartialDue = partialPayments.reduce((sum: number, payment: any) => {
+        const actualAmount = parseFloat(payment.actual_rent_amount) || 0;
+        const paidAmount = parseFloat(payment.amount_paid) || 0;
+        return sum + (actualAmount - paidAmount);
+      }, 0);
+
+      // Check for unpaid months between check-in date and now
+      const unpaidMonths = this.getUnpaidMonthsWithCycleDates(
+        tenant.check_in_date,
+        tenant.check_out_date,
+        tenant.tenant_payments,
+        tenant.pg_locations?.rent_cycle_type as 'CALENDAR' | 'MIDMONTH'
+      );
+      
+      // Override is_rent_paid to false if there are unpaid months
+      const isRentPaid = unpaidMonths.length === 0 ? statusEnriched.is_rent_paid : false;
+      
+      return {
+        ...statusEnriched,
+        is_rent_paid: isRentPaid,
+        rent_cycle: currentRentCycle,
+        payment_status: paymentStatus,
+        partial_payments: partialPayments,
+        total_partial_due: totalPartialDue,
+        unpaid_months: unpaidMonths,
+        tenant_payments: tenant.tenant_payments,
+        advance_payments: tenant.advance_payments,
+        refund_payments: tenant.refund_payments,
+      };
+    });
+
+    // Filter by pending rent if requested
     let filteredTenants = enrichedTenants;
     
     if (pending_rent) {
       filteredTenants = this.tenantStatusService.getTenantsWithPendingRent(filteredTenants);
     }
 
-    // Filter by pending advance if requested - use TenantStatusService
+    // Filter by pending advance if requested
     if (pending_advance) {
       filteredTenants = this.tenantStatusService.getTenantsWithoutAdvance(filteredTenants);
     }
 
-    // Filter by partial rent if requested - use TenantStatusService
+    // Filter by partial rent if requested
     if (partial_rent) {
       filteredTenants = this.tenantStatusService.getTenantsWithPartialRent(filteredTenants);
     }
@@ -877,6 +977,220 @@ export class TenantService {
   }
 
   /**
+   * Calculate rent cycle dates for a tenant based on PG's rent cycle type
+   * Supports both CALENDAR and MIDMONTH cycles
+   */
+  async calculateTenantRentCycleDates(tenantId: number, referenceDate?: string) {
+    // Get tenant with PG location details
+    const tenant = await this.prisma.tenants.findUnique({
+      where: { s_no: tenantId },
+      include: {
+        pg_locations: {
+          select: {
+            s_no: true,
+            location_name: true,
+            rent_cycle_type: true,
+          },
+        },
+        tenant_payments: {
+          orderBy: { end_date: 'desc' },
+          take: 1,
+          select: {
+            end_date: true,
+          },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException(`Tenant with ID ${tenantId} not found`);
+    }
+
+    if (!tenant.pg_locations) {
+      throw new BadRequestException('Tenant PG location not found');
+    }
+
+    const pgRentCycleType = tenant.pg_locations.rent_cycle_type as 'CALENDAR' | 'MIDMONTH';
+    const dateToUse = referenceDate || tenant.check_in_date.toISOString().split('T')[0];
+
+    let rentCycleDates: { start: string; end: string };
+
+    if (pgRentCycleType === 'CALENDAR') {
+      // For CALENDAR: 1st to last day of month
+      rentCycleDates = this.rentCycleCalculatorService.getCalendarMonthDates(dateToUse);
+    } else {
+      // For MIDMONTH: same day to same day next month - 1
+      rentCycleDates = this.rentCycleCalculatorService.getMidmonthDates(dateToUse);
+    }
+
+    // Validate the calculated dates
+    const validation = this.rentCycleCalculatorService.validateRentPeriod(
+      rentCycleDates.start,
+      rentCycleDates.end,
+      pgRentCycleType,
+    );
+
+    const daysInPeriod = this.rentCycleCalculatorService.calculateDaysInPeriod(
+      rentCycleDates.start,
+      rentCycleDates.end,
+    );
+
+    return ResponseUtil.success({
+      tenant_id: tenant.s_no,
+      tenant_name: tenant.name,
+      pg_name: tenant.pg_locations.location_name,
+      rent_cycle_type: pgRentCycleType,
+      cycle_description: this.rentCycleCalculatorService.getCycleTypeDescription(pgRentCycleType),
+      current_cycle: {
+        start_date: rentCycleDates.start,
+        end_date: rentCycleDates.end,
+        days: daysInPeriod,
+        is_valid: validation.isValid,
+        validation_error: validation.error,
+      },
+      has_previous_payments: tenant.tenant_payments.length > 0,
+      last_payment_end_date: tenant.tenant_payments[0]?.end_date?.toISOString().split('T')[0] || null,
+    }, 'Rent cycle dates calculated successfully');
+  }
+
+  /**
+   * Get next rent cycle dates for a tenant
+   * Calculates the next rent period based on the last payment end date
+   */
+  async getNextRentCycleDates(tenantId: number) {
+    // Get tenant with PG location and last payment details
+    const tenant = await this.prisma.tenants.findUnique({
+      where: { s_no: tenantId },
+      include: {
+        pg_locations: {
+          select: {
+            s_no: true,
+            location_name: true,
+            rent_cycle_type: true,
+          },
+        },
+        tenant_payments: {
+          orderBy: { end_date: 'desc' },
+          take: 1,
+          select: {
+            end_date: true,
+          },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException(`Tenant with ID ${tenantId} not found`);
+    }
+
+    if (!tenant.pg_locations) {
+      throw new BadRequestException('Tenant PG location not found');
+    }
+
+    if (tenant.tenant_payments.length === 0) {
+      throw new BadRequestException('No previous payments found. Use calculateTenantRentCycleDates instead.');
+    }
+
+    const pgRentCycleType = tenant.pg_locations.rent_cycle_type as 'CALENDAR' | 'MIDMONTH';
+    const lastPaymentEndDate = tenant.tenant_payments[0].end_date.toISOString().split('T')[0];
+
+    // Calculate next cycle dates
+    const nextCycleDates = this.rentCycleCalculatorService.getNextRentCycleDates(
+      lastPaymentEndDate,
+      pgRentCycleType,
+    );
+
+    // Validate the calculated dates
+    const validation = this.rentCycleCalculatorService.validateRentPeriod(
+      nextCycleDates.startDate,
+      nextCycleDates.endDate,
+      pgRentCycleType,
+    );
+
+    const daysInPeriod = this.rentCycleCalculatorService.calculateDaysInPeriod(
+      nextCycleDates.startDate,
+      nextCycleDates.endDate,
+    );
+
+    return ResponseUtil.success({
+      tenant_id: tenant.s_no,
+      tenant_name: tenant.name,
+      pg_name: tenant.pg_locations.location_name,
+      rent_cycle_type: pgRentCycleType,
+      cycle_description: this.rentCycleCalculatorService.getCycleTypeDescription(pgRentCycleType),
+      last_payment_end_date: lastPaymentEndDate,
+      next_cycle: {
+        start_date: nextCycleDates.startDate,
+        end_date: nextCycleDates.endDate,
+        days: daysInPeriod,
+        is_valid: validation.isValid,
+        validation_error: validation.error,
+      },
+    }, 'Next rent cycle dates calculated successfully');
+  }
+
+  /**
+   * Validate rent period dates for a tenant
+   * Ensures dates match the PG's rent cycle pattern
+   */
+  async validateTenantRentPeriod(
+    tenantId: number,
+    startDate: string,
+    endDate: string,
+  ) {
+    // Get tenant with PG location details
+    const tenant = await this.prisma.tenants.findUnique({
+      where: { s_no: tenantId },
+      include: {
+        pg_locations: {
+          select: {
+            s_no: true,
+            location_name: true,
+            rent_cycle_type: true,
+          },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException(`Tenant with ID ${tenantId} not found`);
+    }
+
+    if (!tenant.pg_locations) {
+      throw new BadRequestException('Tenant PG location not found');
+    }
+
+    const pgRentCycleType = tenant.pg_locations.rent_cycle_type as 'CALENDAR' | 'MIDMONTH';
+
+    // Validate the dates
+    const validation = this.rentCycleCalculatorService.validateRentPeriod(
+      startDate,
+      endDate,
+      pgRentCycleType,
+    );
+
+    const daysInPeriod = this.rentCycleCalculatorService.calculateDaysInPeriod(
+      startDate,
+      endDate,
+    );
+
+    return ResponseUtil.success({
+      tenant_id: tenant.s_no,
+      tenant_name: tenant.name,
+      pg_name: tenant.pg_locations.location_name,
+      rent_cycle_type: pgRentCycleType,
+      cycle_description: this.rentCycleCalculatorService.getCycleTypeDescription(pgRentCycleType),
+      validation_result: {
+        start_date: startDate,
+        end_date: endDate,
+        days: daysInPeriod,
+        is_valid: validation.isValid,
+        error: validation.error,
+      },
+    }, 'Rent period validation completed');
+  }
+
+  /**
    * Get pending rent statistics for dashboard
    */
   async getPendingRentStats(params: any) {
@@ -955,6 +1269,180 @@ export class TenantService {
     });
     
     return Object.values(monthlyStats).sort((a: any, b: any) => a.month.localeCompare(b.month));
+  }
+
+  /**
+   * Get unpaid months using cycle start/end dates
+   * 
+   * Logic:
+   * 1. Start from check-in date
+   * 2. For each cycle until now:
+   *    - Calculate cycle period based on cycle type
+   *    - Check if PAID or PARTIAL payment exists for that cycle
+   *    - If NO payment → Add to unpaid months
+   *    - Move to next cycle
+   * 3. Return ALL unpaid cycle periods
+   * 
+   * MIDMONTH Example: Check-in 10 Dec 2025
+   * Cycle 1: 10 Dec 2025 - 09 Jan 2026 (day 10 to day 10-1 of next month)
+   * Cycle 2: 10 Jan 2026 - 09 Feb 2026
+   * Cycle 3: 10 Feb 2026 - 09 Mar 2026
+   */
+  private getUnpaidMonthsWithCycleDates(
+    checkInDate: Date,
+    checkOutDate: Date | null,
+    tenantPayments: any[],
+    cycleType: 'CALENDAR' | 'MIDMONTH'
+  ): any[] {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0); // Reset to start of day for comparison
+    
+    const endDate = checkOutDate && new Date(checkOutDate) < now ? new Date(checkOutDate) : now;
+    endDate.setHours(0, 0, 0, 0); // Reset to start of day
+    
+    const unpaidMonths: any[] = [];
+    let currentCycleStart = new Date(checkInDate);
+    currentCycleStart.setHours(0, 0, 0, 0); // Reset to start of day
+    
+    // Sort payments by start_date to process in order
+    const sortedPayments = [...tenantPayments].sort((a, b) => 
+      new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+    );
+    
+    // Generate cycles from check-in date onwards
+    // Include all unpaid cycles up to the latest payment end date or today, whichever is later
+    let maxIterations = 100; // Safety limit to prevent infinite loops
+    let iterations = 0;
+    
+    // Find the latest payment end date to determine how far to check
+    let latestPaymentEnd = endDate;
+    if (sortedPayments.length > 0) {
+      const lastPayment = sortedPayments[sortedPayments.length - 1];
+      const lastPaymentEnd = new Date(lastPayment.end_date);
+      lastPaymentEnd.setHours(0, 0, 0, 0);
+      if (lastPaymentEnd > latestPaymentEnd) {
+        latestPaymentEnd = lastPaymentEnd;
+      }
+    }
+    
+    while (iterations < maxIterations) {
+      iterations++;
+      let cyclePeriod: any;
+      
+      if (cycleType === 'CALENDAR') {
+        // CALENDAR: 1st to last day of month
+        cyclePeriod = this.getCalendarCyclePeriod(currentCycleStart);
+      } else {
+        // MIDMONTH: day X to day (X-1) of next month
+        cyclePeriod = this.getMidmonthCyclePeriod(currentCycleStart);
+      }
+      
+      // Stop if cycle start date is after the latest payment end date
+      if (cyclePeriod.start > latestPaymentEnd) {
+        break;
+      }
+      
+      // Check if this cycle period has a PAID or PARTIAL payment
+      const hasPayment = sortedPayments.some((payment: any) => {
+        const paymentStart = new Date(payment.start_date);
+        const paymentEnd = new Date(payment.end_date);
+        
+        // Check if payment covers this cycle period AND is PAID or PARTIAL
+        return (
+          paymentStart <= cyclePeriod.end &&
+          paymentEnd >= cyclePeriod.start &&
+          (payment.status === 'PAID' || payment.status === 'PARTIAL')
+        );
+      });
+      
+      // If no payment found for this cycle, add to unpaid months
+      if (!hasPayment) {
+        unpaidMonths.push({
+          cycle_start: cyclePeriod.startStr,
+          cycle_end: cyclePeriod.endStr,
+          month: cyclePeriod.monthKey,
+          month_name: cyclePeriod.monthName,
+          year: cyclePeriod.year,
+          month_number: cyclePeriod.monthNumber,
+          cycle_type: cycleType,
+        });
+      }
+      
+      // Move to next cycle
+      currentCycleStart = new Date(cyclePeriod.end);
+      currentCycleStart.setDate(currentCycleStart.getDate() + 1);
+      currentCycleStart.setHours(0, 0, 0, 0); // Reset to start of day
+    }
+    
+    return unpaidMonths;
+  }
+
+  /**
+   * Get CALENDAR cycle period (1st to last day of month)
+   * Returns both Date objects and formatted strings
+   */
+  private getCalendarCyclePeriod(startDate: Date): any {
+    const year = startDate.getFullYear();
+    const month = startDate.getMonth();
+    
+    const cycleStart = new Date(year, month, 1);
+    const cycleEnd = new Date(year, month + 1, 0);
+    
+    const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+    const monthName = cycleStart.toLocaleString('default', { month: 'long', year: 'numeric' });
+    
+    return {
+      start: cycleStart,
+      end: cycleEnd,
+      startStr: cycleStart.toISOString().split('T')[0],
+      endStr: cycleEnd.toISOString().split('T')[0],
+      monthKey,
+      monthName,
+      year,
+      monthNumber: month + 1,
+    };
+  }
+
+  /**
+   * Get MIDMONTH cycle period (day X to day (X-1) of next month)
+   * Follows the guide exactly: https://CALENDAR_VS_MIDMONTH_GUIDE.md
+   * 
+   * Logic:
+   * 1. Start date: input date (day X of month)
+   * 2. End date: same day of next month - 1 day
+   * 
+   * Example: Check-in 10 Dec 2025
+   * Cycle 1: 10 Dec 2025 - 09 Jan 2026
+   * Cycle 2: 10 Jan 2026 - 09 Feb 2026
+   */
+  private getMidmonthCyclePeriod(startDate: Date): any {
+    const year = startDate.getFullYear();
+    const month = startDate.getMonth();
+    const day = startDate.getDate();
+    
+    // Start date is the input date
+    const cycleStart = new Date(year, month, day);
+    
+    // End date: same day next month - 1
+    // Create a temporary date for same day next month, then subtract 1 day
+    const tempDate = new Date(year, month + 1, day);
+    tempDate.setDate(tempDate.getDate() - 1);
+    const cycleEnd = tempDate;
+    
+    // Month key and name based on cycle start
+    const monthKey = `${cycleStart.getFullYear()}-${String(cycleStart.getMonth() + 1).padStart(2, '0')}`;
+    const monthName = cycleStart.toLocaleString('default', { month: 'long', year: 'numeric' });
+    
+    return {
+      start: cycleStart,
+      end: cycleEnd,
+      startStr: cycleStart.toISOString().split('T')[0],
+      endStr: cycleEnd.toISOString().split('T')[0],
+      monthKey,
+      monthName,
+      year: cycleStart.getFullYear(),
+      monthNumber: cycleStart.getMonth() + 1,
+    };
   }
 
 }
