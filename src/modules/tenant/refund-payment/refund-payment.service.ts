@@ -20,6 +20,23 @@ export class RefundPaymentService {
       throw new NotFoundException(`Tenant with ID ${createRefundPaymentDto.tenant_id} not found`);
     }
 
+    // Validate tenant has checked out
+    if (!tenant.check_out_date) {
+      throw new BadRequestException(`Refund payments can only be created for tenants who have checked out. Tenant ${tenant.name} has not checked out.`);
+    }
+
+    // Check if tenant already has a refund payment
+    const existingRefund = await this.prisma.refund_payments.findFirst({
+      where: {
+        tenant_id: createRefundPaymentDto.tenant_id,
+        is_deleted: false,
+      },
+    });
+
+    if (existingRefund) {
+      throw new BadRequestException(`Tenant ${tenant.name} already has a refund payment. Only one refund payment is allowed per tenant.`);
+    }
+
     // Validate room exists
     const room = await this.prisma.rooms.findFirst({
       where: {
