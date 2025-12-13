@@ -133,6 +133,14 @@ export class CheckoutService {
     }
 
     const checkoutDate = new Date(checkoutDto.check_out_date);
+    const checkInDate = new Date(tenant.check_in_date);
+
+    // Validate that checkout date is greater than check-in date
+    if (checkoutDate <= checkInDate) {
+      throw new BadRequestException(
+        `Checkout date must be greater than check-in date. Check-in date: ${checkInDate.toISOString().split('T')[0]}, Checkout date: ${checkoutDate.toISOString().split('T')[0]}`
+      );
+    }
 
     // Update tenant status
     const updatedTenant = await this.prisma.tenants.update({
@@ -216,8 +224,18 @@ export class CheckoutService {
         );
       }
 
+      const checkoutDate = new Date(updateCheckoutDateDto.check_out_date);
+      const checkInDate = new Date(tenant.check_in_date);
+
+      // Validate that checkout date is greater than check-in date
+      if (checkoutDate <= checkInDate) {
+        throw new BadRequestException(
+          `Checkout date must be greater than check-in date. Check-in date: ${checkInDate.toISOString().split('T')[0]}, Checkout date: ${checkoutDate.toISOString().split('T')[0]}`
+        );
+      }
+
       updateData = {
-        check_out_date: new Date(updateCheckoutDateDto.check_out_date),
+        check_out_date: checkoutDate,
       };
     } else {
       throw new BadRequestException('Either provide check_out_date or set clear_checkout to true');
